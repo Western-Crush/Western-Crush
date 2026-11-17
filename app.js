@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-const db = createClient('https://krfphvzbgjkhwwkmuol.supabase.co','sb_publishable_xv1mdxb9FR_0ldAMCFudiQ__uibMltd');
+const db = createClient('https://krfphvzbgjkhvwwkmuol.supabase.co','sb_publishable_xv1mdxb9FR_0ldAMCFudiQ__uibMltd');
 const $ = id => document.getElementById(id);
 const site = 'https://western-crush.github.io/Western-Crush/';
 const status = msg => $('status').textContent = msg;
