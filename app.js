@@ -16,6 +16,87 @@ let path=data?.photo_url||null;const photos=element('div');photos.append(element
 async function preview(){img.hidden=true;img.removeAttribute('src');remove.disabled=!path;if(path&&path.startsWith(uid+'/')){const {data,error}=await bucket.createSignedUrl(path,600);check(error);img.src=data.signedUrl;img.hidden=false;}}
 upload.onclick=()=>act(async()=>{upload.disabled=remove.disabled=true;try{if(user?.id!==uid)throw Error('Session expirée.');const f=file.files[0];if(!f||!['image/jpeg','image/png','image/webp'].includes(f.type)||f.size>5*1024*1024)throw Error('Choisissez une image JPEG, PNG ou WebP de 5 Mo maximum.');const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[f.type];const next=uid+'/'+crypto.randomUUID()+'.'+ext;const {error}=await bucket.upload(next,f,{contentType:f.type});check(error);const result=await db.from('profiles').update({photo_url:next}).eq('id',uid).select('id').single();if(result.error){await bucket.remove([next]);throw Error('Enregistrez votre profil avant votre photo : '+result.error.message);}const old=path;path=next;file.value='';if(old?.startsWith(uid+'/')){const r=await bucket.remove([old]);if(r.error){await preview();throw Error('Nouvelle photo enregistrée, mais ancienne photo non supprimée : '+r.error.message);}}await preview();status('Photo enregistrée.');}finally{upload.disabled=false;remove.disabled=!path;}});
 remove.onclick=()=>act(async()=>{if(!path||user?.id!==uid)return;upload.disabled=remove.disabled=true;try{const {error}=await bucket.remove([path]);check(error);const r=await db.from('profiles').update({photo_url:null}).eq('id',uid);check(r.error);path=null;await preview();status('Photo supprimée.');}finally{upload.disabled=false;remove.disabled=!path;}});await preview();}
-document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>act(async()=>{if(btn.dataset.tab==='profile')await profile();else{revision++;$('view').textContent='Fonctionnalité en préparation.';}}));
-db.auth.onAuthStateChange((event,session)=>{const previous=user?.id;user=session?.user||null;$('auth').hidden=!!user;$('app').hidden=!user;if(user&&(previous!==user.id||event==='INITIAL_SESSION'))setTimeout(()=>act(profile),0);else if(!user){revision++;$('view').replaceChildren();}});
+
+
+function premium() {
+  revision++;
+  const view = $('view');
+  view.replaceChildren();
+
+  view.append(element('h2', '★ Western Crush Premium'));
+  view.append(element('p', 'Abonnements en mode test.'));
+
+  const plans = [
+    {
+      id: 'cowboy',
+      name: '🤠 Cowboy Premium'
+    },
+    {
+      id: 'vip',
+      name: '⭐ Shérif VIP'
+    }
+  ];
+
+  for (const plan of plans) {
+    const card = element('article');
+    card.append(element('h2', plan.name));
+
+    const btn = element('button', "S'abonner — Test");
+
+    btn.onclick = () => act(async () => {
+      btn.disabled = true;
+
+      try {
+        if (!user) {
+          throw Error('Connexion obligatoire.');
+        }
+
+        status('Ouverture du paiement Stripe…');
+
+        const { data, error } =
+          await db.functions.invoke('create-checkout', {
+            body: { plan: plan.id }
+          });
+
+        check(error);
+
+        if (!data?.url) {
+          throw Error(data?.error || 'Paiement indisponible.');
+        }
+
+        const url = new URL(data.url);
+
+        if (url.origin !== 'https://checkout.stripe.com') {
+          throw Error('Adresse de paiement invalide.');
+        }
+
+        window.location.assign(url.href);
+
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    card.append(btn);
+    view.append(card);
+  }
+
+  view.append(
+    element('p', '🔒 Paiement sécurisé par Stripe.')
+  );
+}
+
+document.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.onclick = () => act(async () => {
+    if (btn.dataset.tab === 'profile') {
+      await profile();
+    } else if (btn.dataset.tab === 'premium') {
+      premium();
+    } else {
+      revision++;
+      $('view').textContent =
+        'Fonctionnalité en préparation.';
+    }
+  });
+});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
