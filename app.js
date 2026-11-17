@@ -100,3 +100,19 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
   });
 });
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+db.auth.onAuthStateChange((event, session) => {
+  const previous = user?.id;
+  user = session?.user || null;
+
+  $('auth').hidden = !!user;
+  $('app').hidden = !user;
+
+  if (user) {
+    if (previous !== user.id || event === 'INITIAL_SESSION') {
+      setTimeout(() => act(profile), 0);
+    }
+  } else {
+    revision++;
+    $('view').replaceChildren();
+  }
+});
