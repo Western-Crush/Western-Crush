@@ -1,1 +1,230 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#21150f">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Western Crush — Rencontres Country</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+ margin: 0;
+ min-height: 100vh;
+ background: radial-gradient(ellipse at top,
+ #80532e 0%, #302016 40%, #100c09 100%);
+ color: #fff0d8;
+ font-family: Arial, sans-serif;
+}
+
+main {
+ max-width: 850px;
+ margin: auto;
+ padding: 25px;
+}
+
+header {
+ text-align: center;
+ padding: 35px 0;
+}
+
+.logo {
+ font-size: 65px;
+ color: #e5b66c;
+}
+
+h1 {
+ font-family: Georgia, serif;
+ font-size: clamp(36px, 7vw, 65px);
+ color: #f5cc86;
+ margin: 10px 0;
+ text-shadow: 0 4px 15px #000;
+}
+
+h2 {
+ font-family: Georgia, serif;
+ color: #f5cc86;
+}
+
+.slogan {
+ letter-spacing: 3px;
+ color: #dfb98c;
+}
+
+section, article {
+ background: rgba(35, 23, 16, .95);
+ border: 1px solid #a67c45;
+ border-radius: 22px;
+ padding: 25px;
+ margin: 18px 0;
+ box-shadow: 0 15px 40px #0005;
+}
+
+label {
+ display: block;
+ margin-top: 15px;
+}
+
+input, textarea, select {
+ width: 100%;
+ padding: 15px;
+ margin: 8px 0;
+ border: 1px solid #94704b;
+ border-radius: 10px;
+ font: inherit;
+ background: #fff2df;
+ color: #21150f;
+}
+
+input[type="checkbox"] {
+ width: auto;
+ accent-color: #c99a54;
+}
+
+button {
+ border: 0;
+ border-radius: 12px;
+ padding: 14px 22px;
+ margin: 5px 0;
+ font: inherit;
+ font-weight: bold;
+ cursor: pointer;
+ color: #21150f;
+ background: linear-gradient(135deg,
+ #f5d398, #ba813a);
+}
+
+button:hover {
+ filter: brightness(1.15);
+}
+
+.actions {
+ display: flex;
+ gap: 12px;
+ margin-top: 20px;
+}
+
+.actions button {
+ flex: 1;
+}
+
+nav {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 8px;
+ justify-content: center;
+}
+
+img {
+ width: 100%;
+ max-height: 450px;
+ object-fit: cover;
+ border-radius: 15px;
+}
+
+small {
+ color: #d9b99a;
+ line-height: 1.6;
+}
+
+#status {
+ white-space: pre-wrap;
+ color: #ffcf87;
+}
+
+footer {
+ text-align: center;
+ padding: 25px 0;
+}
+
+a { color: #f5cc86; }
+
+@media(max-width:600px) {
+ main { padding: 15px; }
+ section { padding: 18px; }
+ header { padding: 20px 0; }
+}
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+ <div class="logo">★</div>
+ <h1>Western Crush</h1>
+ <p class="slogan">COUNTRY • LOVE • FREEDOM</p>
+ <p>Le coup de foudre au Far West</p>
+ <small>Application réservée aux adultes — 18+</small>
+</header>
+
+<p><small>
+ Version de test : inscription et profil privé.
+ Rencontres et paiements indisponibles.
+</small></p>
+
+<p id="status" role="status"></p>
+
+<section id="auth">
+
+ <h2>🤠 Rejoindre le saloon</h2>
+ <p>Ton aventure commence ici.</p>
+
+ <label>Adresse email
+ <input id="email" type="email"
+ placeholder="Votre adresse email"
+ autocomplete="email">
+ </label>
+
+ <label>Mot de passe (12 caractères minimum)
+ <input id="password" type="password"
+ minlength="12"
+ placeholder="Votre mot de passe">
+ </label>
+
+ <label>
+ <input id="adult" type="checkbox">
+ Je certifie avoir 18 ans ou plus.
+ </label>
+
+ <div class="actions">
+ <button id="register">Inscription</button>
+ <button id="login">Connexion</button>
+ </div>
+
+</section>
+
+<div id="app" hidden>
+
+<nav>
+ <button data-tab="discover">🤠 Découvrir</button>
+ <button data-tab="matches">❤️ Matchs</button>
+ <button data-tab="profile">👤 Profil</button>
+ <button data-tab="premium">⭐ Premium</button>
+ <button id="logout">Déconnexion</button>
+</nav>
+
+<section id="view"></section>
+
+</div>
+
+<footer>
+ <p>★ Western Crush ★</p>
+ <small>
+ Ne partagez jamais vos coordonnées bancaires,
+ votre adresse ou votre position exacte.
+ Le signalement et le blocage ne sont pas
+ encore disponibles.
+ </small>
+ <p><small>© 2026 Western Crush</small></p>
+</footer>
+
+</main>
+
+<script type="module" src="app.js?v=2"></script>
+</body>
+</html>
 <!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#302016"><link rel="manifest" href="manifest.json"><title>Western Crush</title><style> *{box-sizing:border-box}body{margin:0;background:#21150f;color:#ffe9c9;font:16px system-ui}main{max-width:650px;margin:auto;padding:20px}h1,h2{font-family:Georgia;color:#f5bf75}h1{text-align:center;font-size:42px;margin-bottom:0}header p{text-align:center}section,article{background:#38251b;border:1px solid #795036;border-radius:18px;padding:20px;margin:14px 0}nav{display:flex;flex-wrap:wrap;gap:8px}button,input,textarea{font:inherit;border-radius:9px;padding:11px;margin:5px 0}button{background:#b56532;color:white;border:0;cursor:pointer}input,textarea{width:100%;border:1px solid #a77b55;background:#fff2df;color:#21150f}small{color:#e5bd99}img{width:100%;max-height:350px;object-fit:cover;border-radius:12px}a{color:#ffcd91}#status{white-space:pre-wrap}label{display:block;margin-top:8px}</style><main><header><h1>★ Western Crush</h1><p>Le coup de foudre au Far West • 18+</p></header><p><small>Version de test : inscription et profil privé. Rencontres et paiements indisponibles.</small></p><p id="status" role="status"></p><section id="auth"><h2>Rejoindre le saloon</h2><label>Email<input id="email" type="email"></label><label>Mot de passe (12 caractères minimum)<input id="password" type="password" minlength="12"></label><label><input id="adult" type="checkbox" style="width:auto"> Je certifie avoir 18 ans ou plus.</label><button id="register">Inscription</button> <button id="login">Connexion</button></section><div id="app" hidden><nav><button data-tab="discover">Découvrir</button><button data-tab="matches">Matchs</button><button data-tab="profile">Profil</button><button data-tab="premium">Premium</button><button id="logout">Déconnexion</button></nav><section id="view"></section></div><small>Ne partagez jamais votre adresse, vos coordonnées bancaires ou votre position exacte avec un inconnu. Les fonctions de signalement et de blocage ne sont pas encore disponibles.</small></main><script type="module" src="app.js?v=2"></script></html>
