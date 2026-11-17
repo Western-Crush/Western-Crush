@@ -1,10 +1,25 @@
-const $=id=>document.getElementById(id), status=t=>$('status').textContent=t;
-const read=(k,d)=>JSON.parse(localStorage.getItem(k)||JSON.stringify(d)), save=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-let user=null, tab='discover';
-const examples=[{id:1,name:'Camille',age:30,bio:'Danse country et balades à cheval.'},{id:2,name:'Alex',age:34,bio:'Musique western et grands espaces.'},{id:3,name:'Morgan',age:29,bio:'Concerts country et soirées au saloon.'}];
-async function digest(password,salt){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:600000,hash:'SHA-256'},key,256);return Array.from(new Uint8Array(bits),b=>b.toString(16).padStart(2,'0')).join('');}
-async function auth(register){try{let email=$('email').value.trim().toLowerCase(),pass=$('password').value;if(!$('email').checkValidity()||!email||pass.length<12)return status('Email valide et 12 caractères minimum requis.');let accounts=read('wc_accounts',{});if(register){if(!$('adult').checked)return status('Vous devez avoir 18 ans ou plus.');if(Object.hasOwn(accounts,email))return status('Compte déjà existant.');let salt=crypto.randomUUID(); accounts[email]={salt,hash:await digest(pass,salt),profile:{name:'',age:18,bio:''},likes:[],hidden:[]};save('wc_accounts',accounts);}else if(!Object.hasOwn(accounts,email)||accounts[email].hash!==await digest(pass,accounts[email].salt))return status('Identifiants incorrects.');user=email;$('password').value='';$('auth').hidden=true;$('app').hidden=false;status('Bienvenue au saloon !');show(register?'profile':'discover');}catch(e){status('Connexion locale impossible. Utilisez un navigateur récent sur HTTPS ou localhost.');}}
-function data(){return read('wc_accounts',{})[user]};function update(d){let a=read('wc_accounts',{});a[user]=d;save('wc_accounts',a);}
-function el(tag,t,parent){let e=document.createElement(tag);e.textContent=t;parent.append(e);return e}function btn(t,fn,p){let e=el('button',t,p);e.onclick=fn;return e}
-function show(t){tab=t;let v=$('view');v.replaceChildren();let d=data();if(t==='profile'){el('h2','Mon profil',v);let fields={};for(let [k,label] of Object.entries({name:'Pseudo',age:'Âge',bio:'Présentation'})){let l=el('label',label,v),i=document.createElement(k==='bio'?'textarea':'input');i.value=d.profile[k];if(k==='age'){i.type='number';i.min=18;}i.maxLength=k==='bio'?500:60;l.append(i);fields[k]=i;}btn('Enregistrer',()=>{let age=Number(fields.age.value);if(!fields.name.value.trim()||!Number.isInteger(age)||age<18||age>120)return status('Pseudo et âge adulte valides requis.');d.profile={name:fields.name.value.trim(),age,bio:fields.bio.value};update(d);status('Profil enregistré.');},v);}else if(t==='premium'){el('h2','Western Crush Premium',v);el('p','Abonnement non activé. Aucun paiement disponible.',v);}else{el('h2',t==='matches'?'Mes matchs simulés':'Découvrir',v);el('p','Profils fictifs pour tester le fonctionnement.',v);let list=examples.filter(x=>!d.hidden.includes(x.id)&&(t==='matches'?d.likes.includes(x.id):!d.likes.includes(x.id)));if(!list.length)el('p','Aucun profil disponible.',v);for(let x of list){let a=el('article','',v);el('h3',x.name+' • '+x.age+' ans',a);el('p',x.bio,a);if(t==='discover')btn('♥ J’aime',()=>{d.likes.push(x.id);update(d);status('Match simulé !');show(t)},a);btn(t==='matches'?'Supprimer le match':'Passer / masquer',()=>{d.hidden.push(x.id);d.likes=d.likes.filter(i=>i!==x.id);update(d);show(t)},a);}}}
-$('register').onclick=()=>auth(true);$('login').onclick=()=>auth(false);$('logout').onclick=()=>{user=null;$('app').hidden=true;$('auth').hidden=false;$('view').replaceChildren();status('Déconnecté.');};document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>show(b.dataset.tab));if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const db = createClient('https://krfphvzbgjkhwwkmuol.supabase.co','sb_publishable_xv1mdxb9FR_0ldAMCFudiQ__uibMltd');
+const $ = id => document.getElementById(id);
+const site = 'https://western-crush.github.io/Western-Crush/';
+const status = msg => $('status').textContent = msg;
+let user = null;
+async function act(fn){try {await fn()} catch(e){status(e.message || 'Une erreur est survenue.')}}
+function check(error){if(error) throw error;}
+$('register').onclick = () => act(async()=>{
+ if(!$('adult').checked) throw Error('Vous devez avoir 18 ans ou plus.');
+ if(!$('email').validity.valid || !$('email').value || $('password').value.length<12) throw Error('Email valide et 12 caractères minimum requis.');
+ const {error}=await db.auth.signUp({email:$('email').value.trim(),password:$('password').value,options:{emailRedirectTo:site,data:{adult_declared:true}}});check(error);$('password').value='';status('Vérifiez votre boîte mail pour confirmer votre inscription.');
+});
+$('login').onclick=()=>act(async()=>{const {error}=await db.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});check(error);$('password').value='';status('Connexion réussie.');});
+$('logout').onclick=()=>act(async()=>{const {error}=await db.auth.signOut();check(error);status('Déconnexion réussie.');});
+async function profile(){
+ const view=$('view');view.replaceChildren();
+ const {data,error}=await db.from('profiles').select('pseudo,bio').eq('id',user.id).maybeSingle();check(error);
+ const title=document.createElement('h2');title.textContent='Mon profil privé';view.append(title);
+ const form=document.createElement('form');const p=document.createElement('input');p.placeholder='Pseudo';p.required=true;p.maxLength=60;p.value=data?.pseudo||'';const b=document.createElement('textarea');b.placeholder='Présentation';b.maxLength=1000;b.value=data?.bio||'';const save=document.createElement('button');save.textContent='Enregistrer';form.append('Pseudo',p,'Présentation',b,save);view.append(form);
+ form.onsubmit=e=>{e.preventDefault();act(async()=>{if(!p.value.trim())throw Error('Pseudo obligatoire.');const {error}=await db.from('profiles').upsert({id:user.id,pseudo:p.value.trim(),bio:b.value.trim()});check(error);status('Profil enregistré.');});};
+}
+document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>act(async()=>{if(btn.dataset.tab==='profile')await profile();else $('view').textContent='Fonctionnalité en préparation.';}));
+db.auth.onAuthStateChange((event,session)=>{user=session?.user||null;$('auth').hidden=!!user;$('app').hidden=!user;if(user)setTimeout(()=>act(profile),0);else $('view').replaceChildren();});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
