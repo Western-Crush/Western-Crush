@@ -30,13 +30,20 @@ label{display:block;margin-top:8px}
 .wc-deck{max-width:460px;margin:24px auto;text-align:center}.wc-profile-card{overflow:hidden;padding:14px;border:1px solid #b98645;box-shadow:0 12px 30px #0005;text-align:left}.wc-profile-card .member-photo{width:100%;height:clamp(260px,55vh,470px);object-fit:cover;border-radius:14px}.wc-profile-card .member-placeholder{min-height:260px}.wc-profile-card h2{font-size:1.65rem;margin:15px 0 8px}.wc-card-actions,.wc-card-safety{display:flex;gap:8px;flex-wrap:wrap}.wc-card-actions button,.wc-card-safety button{flex:1 1 120px;width:auto}.wc-card-actions button{min-height:52px;border-radius:30px}.wc-card-actions button:first-child{background:#654631;color:#fff}.wc-card-actions button:last-child{background:#a94b36;color:#fff}.wc-card-safety button{font-size:.85rem;background:#493124;color:#f5d4ae}
 
 body{background:radial-gradient(ellipse at top,#50301e 0,#21150f 55%);min-height:100vh}main{max-width:780px;padding-bottom:120px}header{padding:12px 0}h1{letter-spacing:.04em;text-shadow:0 2px 14px #f5bf7530}section{background:#38251bf5;box-shadow:0 16px 40px #0003}nav{position:fixed;bottom:0;left:0;right:0;z-index:20;background:#25170ff5;border-top:1px solid #b98645;padding:8px max(8px,calc((100vw - 780px)/2)) calc(8px + env(safe-area-inset-bottom));justify-content:center;gap:4px}nav button{font-size:.78rem;padding:8px;flex:1 1 auto;min-height:42px}nav button[data-tab]{background:#513522}nav button[data-tab]::before{display:block;font-size:1.3rem}nav [data-tab=discover]::before{content:'⌖'}nav [data-tab=matches]::before{content:'♥'}nav [data-tab=profile]::before{content:'♟'}nav [data-tab=premium]::before{content:'★'} .wc-filters{border:1px solid #795036;border-radius:12px;padding:12px}.wc-filters summary{cursor:pointer;color:#f5bf75;font-weight:bold}.wc-profile-card{touch-action:pan-y;transition:transform .15s ease;background:linear-gradient(150deg,#4b3020,#302016);user-select:none}.wc-profile-card img{pointer-events:none}.wc-profile-card .member-photo{max-height:none;height:clamp(300px,55vh,500px)}.wc-profile-card .member-placeholder{min-height:300px}.wc-deck{max-width:520px}.wc-celebration{position:fixed;z-index:40;top:25%;left:50%;transform:translateX(-50%);background:#38251b;border:2px solid #f5bf75;color:#ffe9c9;padding:24px;border-radius:20px;font:bold 1.5rem Georgia;box-shadow:0 0 40px #f5bf7560;animation:wc-pop .35s ease-out;pointer-events:none;white-space:nowrap}@keyframes wc-pop{from{opacity:0;transform:translateX(-50%) scale(.7)}to{opacity:1;transform:translateX(-50%) scale(1)}}@media(prefers-reduced-motion:reduce){.wc-celebration{animation:none}.wc-profile-card{transition:none}}@media(max-width:480px){main{padding:12px 12px 150px}section{padding:12px}h1{font-size:34px}nav button{font-size:.72rem}}
+
+/* V12.2 : navigation dans le flux sur ordinateur, fixe sur mobile. */
+#app nav{position:sticky;top:0;bottom:auto;padding:8px;border:1px solid #795036;border-radius:14px;gap:6px}
+main{padding-bottom:32px}
+.wc-filters summary{padding:10px;min-height:44px}.wc-filters .search-filters{margin-bottom:0}
+.wc-profile-card{margin-top:10px}.wc-deck{margin-top:16px}
+@media(max-width:700px){#app nav{position:fixed;top:auto;bottom:0;left:0;right:0;border-radius:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}#app nav button{margin:0;min-height:44px;overflow-wrap:anywhere}main{padding-bottom:calc(150px + env(safe-area-inset-bottom))}html{scroll-padding-bottom:150px}}
 </style>
 </head>
 <body>
 <main>
 <header>
 <h1>★ Western Crush</h1>
-<p>Le coup de foudre au Far West • 18+</p><p><small>Version V12.1</small></p>
+<p>Le coup de foudre au Far West • 18+</p><p><small>Version V12.2</small></p>
 </header>
 <p><small>🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.</small></p>
 <p id="status" role="status"></p>
@@ -71,6 +78,6 @@ Je certifie avoir 18 ans ou plus.
 <p><small>© 2026 Western Crush — Tous droits réservés.</small></p>
 </footer>
 </main>
-<script type="module" src="app.js?v=12.1"></script>
+<script type="module" src="app.js?v=12.2"></script>
 </body>
 </html>

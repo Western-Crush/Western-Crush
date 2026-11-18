@@ -607,7 +607,7 @@ function searchForm() {
     f.value=searchFilters[key] ?? ''; fields[key]=f;l.append(f);form.append(l);return f;
   }
   for(const [k,label] of [['min_age','Âge minimum'],['max_age','Âge maximum']]){
-    const f=field(k,label);f.type='number';f.min=18;f.max=120;f.required=true;f.value=searchFilters[k];
+    const f=field(k,label);f.type='number';f.min=18;f.max=120;f.required=true;f.defaultValue=String(searchFilters[k] ?? defaultFilters()[k]);f.value=f.defaultValue;
   }
   field('wanted_gender','Genre',[['','Tout le monde'],['femme','Femme'],['homme','Homme'],['autre','Autre']]);
   const city=field('wanted_city','Ville');city.maxLength=100;
@@ -651,7 +651,7 @@ async function discover() {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  const filters = element('details'); filters.className = 'wc-filters'; filters.append(element('summary','🔎 Filtres de recherche'), searchForm());
+  const filters = element('details'); filters.className = 'wc-filters'; filters.open = false; filters.append(element('summary','🔎 Filtres de recherche'), searchForm());
   view.replaceChildren(element('h2', '🤠 Découvrir les membres'), filters);
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
