@@ -777,6 +777,52 @@ async function administration() {
   } catch (e) { if (current()) view.textContent = 'Administration indisponible.'; throw e; }
 }
 
+// NOTIFICATIONS PRIVEES
+const notificationButton = $('notifications');
+let notificationBusy = false;
+async function refreshNotificationCount() {
+  const uid = user?.id;
+  if (!uid || notificationBusy) return;
+  notificationBusy = true;
+  try {
+    const r = await db.from('notifications').select('id', {count:'exact',head:true}).eq('user_id',uid).eq('is_read',false);
+    if (user?.id !== uid) return;
+    notificationButton.textContent = r.error ? '🔔 Notifications' : `🔔 Notifications${r.count ? ' ('+r.count+')' : ''}`;
+  } catch { /* Nouvelle tentative au prochain rafraîchissement. */ }
+  finally { notificationBusy = false; }
+}
+async function notifications() {
+  const uid = user?.id, rev = ++revision, view = $('view');
+  if (!uid) return;
+  const current = () => user?.id === uid && revision === rev;
+  view.textContent = 'Chargement des notifications…';
+  const r = await db.from('notifications').select('id,type,is_read,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(100);
+  if (!current()) return;
+  if (r.error) { view.textContent = 'Notifications indisponibles.'; check(r.error); }
+  view.replaceChildren(element('h2','🔔 Mes notifications'),actionButton('Actualiser',notifications),actionButton('Tout marquer comme lu',async()=>{
+    if (!current()) return;
+    check((await db.from('notifications').update({is_read:true}).eq('user_id',uid).eq('is_read',false)).error);
+    await refreshNotificationCount(); if(current()) await notifications();
+  }));
+  const labels = {like:'❤️ Un membre apprécie votre profil.',match:'💘 Vous avez un nouveau match !',message:'💬 Vous avez reçu un message.'};
+  if (!r.data.length) view.append(element('p','Aucune notification pour le moment.'));
+  for (const n of r.data) {
+    const card = element('article');
+    card.append(element('h3',(n.is_read?'':'● ')+(labels[n.type] || 'Nouvelle notification')),element('small',new Date(n.created_at).toLocaleString('fr-FR')));
+    if (!n.is_read) card.append(actionButton('Marquer comme lue',async()=>{
+      if (!current()) return;
+      check((await db.from('notifications').update({is_read:true}).eq('user_id',uid).eq('id',n.id)).error);
+      await refreshNotificationCount(); if(current()) await notifications();
+    }));
+    if(n.type==='match'||n.type==='message') card.append(actionButton('Ouvrir mes matchs',matches));
+    view.append(card);
+  }
+  await refreshNotificationCount();
+}
+notificationButton.onclick = () => act(notifications);
+setInterval(refreshNotificationCount, 15000);
+window.addEventListener('focus',refreshNotificationCount);
+
 // NAVIGATION
 
 document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -808,6 +854,8 @@ db.auth.onAuthStateChange((event, session) => {
   const previous = user?.id;
   user = session?.user || null;
   adminButton.hidden = true;
+  if (previous !== user?.id) notificationButton.textContent = '🔔 Notifications';
+  setTimeout(refreshNotificationCount, 0);
   setTimeout(() => act(syncAdmin), 0);
 
   $('auth').hidden = !!user;
