@@ -177,11 +177,15 @@ async function profile() {
     const l = element('label', label);
 
     const f = element(
-      key === 'bio' || key === 'interests'
-        ? 'textarea'
-        : 'input'
+      key === 'western_style' || key === 'relationship_goal' ? 'select' : key === 'bio' || key === 'interests' ? 'textarea' : 'input'
     );
 
+    if (f.tagName === 'SELECT') {
+      const options = key === 'western_style' ? ['Country traditionnel','Country Line Dance','Ranch et équitation','Country Rock','Western et Far West','Tous les styles'] : ['Relation sérieuse','Amitié','Partenaire de danse','Rencontres'];
+      const existing = data?.[key];
+      if(existing && !options.includes(existing)) options.push(existing);
+      f.append(new Option('Non renseigné',''), ...options.map(v=>new Option(v,v)));
+    }
     f.value = data?.[key] ?? '';
     f.maxLength = max;
 
@@ -198,6 +202,16 @@ async function profile() {
     fields[key] = f;
     l.append(f);
     form.append(l);
+    if(key === 'interests') {
+      const choices=element('fieldset');choices.className='wc-passions';choices.append(element('legend','Choisir vos passions (ou compléter le texte)'));
+      const parse=()=>f.value.split(/[,;]+/).map(v=>v.trim()).filter(Boolean);
+      for(const hobby of ['Musique','Danse','Country','Line Dance','Équitation','Rodéo','Nature','Festivals','Guitare','Voyages']){
+        const label=element('label'),cb=element('input');cb.type='checkbox';
+        const sync=()=>{cb.checked=parse().some(v=>v.toLowerCase()===hobby.toLowerCase());};sync();f.addEventListener('input',sync);
+        cb.onchange=()=>{let values=parse().filter(v=>v.toLowerCase()!==hobby.toLowerCase());if(cb.checked)values.push(hobby);const next=values.join(', ');if(next.length<=500)f.value=next;f.dispatchEvent(new Event('input'));};
+        label.append(cb,document.createTextNode(hobby));choices.append(label);
+      }form.append(choices);
+    }
   }
 
   const visibility = element('input');
@@ -1155,7 +1169,7 @@ async function renderGallery(panel,target,own,uid,rev){
     if(row){
       const pic=element('img');pic.alt='Photo '+pos;pic.referrerPolicy='no-referrer';
       const signed=await storage.createSignedUrl(row.photo_url,60);if(!current())return;
-      if(!signed.error){pic.src=signed.data.signedUrl;cell.append(pic);}else cell.append(element('p','Photo indisponible'));
+      if(!signed.error){pic.src=signed.data.signedUrl;const zoom=element('button');zoom.type='button';zoom.className='wc-photo-zoom';zoom.setAttribute('aria-label','Agrandir la photo '+pos);zoom.append(pic);zoom.onclick=()=>{if(current())openGalleryZoom(pic);};cell.append(zoom);}else cell.append(element('p','Photo indisponible'));
       if(own)cell.append(actionButton('Supprimer',async()=>{
         if(!current()||!confirm('Supprimer cette photo ?'))return;
         check((await storage.remove([row.photo_url])).error);
@@ -1177,17 +1191,21 @@ async function renderGallery(panel,target,own,uid,rev){
   }
   if(!own&&!r.data.length)panel.append(element('p','Aucune photo supplémentaire accessible.'));
 }
+function openGalleryZoom(pic){
+  const dialog=element('dialog');dialog.className='wc-lightbox';const close=element('button','Fermer ×');close.type='button';close.onclick=()=>dialog.close();const img=element('img');img.src=pic.src;img.alt=pic.alt;img.referrerPolicy='no-referrer';dialog.append(close,img);dialog.addEventListener('close',()=>dialog.remove());dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});document.body.append(dialog);dialog.showModal();
+}
 async function detailedProfile(target,name,back){
   const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
   const current=()=>user?.id===uid && revision===rev;
   view.replaceChildren(actionButton('← Retour',back),element('p','Chargement du profil…'));
-  const [p,c,m]=await Promise.all([db.from('profiles').select('pseudo,age,city,department,bio,interests,western_style,relationship_goal').eq('id',target).maybeSingle(),db.rpc('compatibility_score',{other_user:target}),db.rpc('get_matches')]);
+  const [p,c,m,me]=await Promise.all([db.from('profiles').select('pseudo,age,city,department,bio,interests,western_style,relationship_goal').eq('id',target).maybeSingle(),db.rpc('compatibility_score',{other_user:target}),db.rpc('get_matches'),db.from('profiles').select('interests,western_style,relationship_goal').eq('id',uid).maybeSingle()]);
   if(!current())return;
   view.replaceChildren(actionButton('← Retour',back));
   if(p.error||!p.data){view.append(element('p','Profil détaillé indisponible selon les autorisations.'));return;}
-  const x=p.data,card=element('article');card.append(element('h2',`${x.pseudo||name} — ${x.age} ans`),element('p',[x.city,x.department].filter(Boolean).join(' · ')),element('p',x.bio||'Aucune présentation.'));
+  const x=p.data,card=element('article');card.className='wc-detail';card.append(element('h2',`${x.pseudo||name} — ${x.age} ans`),element('p',[x.city,x.department].filter(Boolean).join(' · ')),element('p',x.bio||'Aucune présentation.'));
   for(const [label,value] of [['Passions',x.interests],['Style Western',x.western_style],['Relation recherchée',x.relationship_goal]])card.append(element('p',label+' : '+(value||'Non renseigné')));
-  if(!c.error&&c.data!==null){card.append(element('h3',c.data+' % de compatibilité'),element('small','Score indicatif fondé sur les préférences déclarées.'));const bar=element('progress');bar.max=100;bar.value=c.data;card.append(bar);}
+  const complete=v=>v&&['interests','western_style','relationship_goal'].every(k=>String(v[k]??'').trim());
+  if(!me.error&&complete(me.data)&&complete(x)&&!c.error&&c.data!==null){card.append(element('h3',c.data+' % de compatibilité'),element('small','Score indicatif fondé sur les préférences déclarées.'));const bar=element('progress');bar.max=100;bar.value=c.data;card.append(bar);}else card.append(element('p','Compatibilité non calculée : préférences incomplètes ou score indisponible.'));
   view.append(card);void memberPhoto(card,target,uid,rev);void renderBadge(card,target,uid,rev);
   if(!m.error&&m.data.some(x=>x.match_id===target)){const panel=element('article');view.append(panel);await renderGallery(panel,target,false,uid,rev);}else view.append(element('p','Galerie supplémentaire réservée aux matchs.'));
 }

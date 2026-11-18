@@ -40,13 +40,17 @@ main{padding-bottom:32px}
 
 .wc-thread{display:flex;flex-direction:column;gap:10px;min-height:220px;max-height:55vh;overflow:auto;padding:14px 6px;overscroll-behavior:contain}.wc-bubble{max-width:85%;padding:10px 14px;border-radius:16px;overflow-wrap:anywhere;white-space:pre-wrap}.wc-mine{align-self:flex-end;background:#a85b30;color:#fff;border-bottom-right-radius:4px}.wc-theirs{align-self:flex-start;background:#513522;border:1px solid #795036;border-bottom-left-radius:4px}.wc-bubble small{display:block;font-size:.72rem;margin-top:6px;text-align:right;color:#ffe9c9}.wc-composer{display:flex;gap:8px;align-items:center}.wc-composer textarea{flex:1;min-width:0;min-height:64px}.wc-composer button{flex-shrink:0}.wc-composer button:disabled{opacity:.5}
 .wc-online{color:#75df97}.wc-offline{color:#c4b7aa}.wc-typing{min-height:1.5em;color:#e5bd99;font-style:italic;font-size:.85rem;margin:4px 0}
-.wc-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.wc-gallery>div{min-width:0;background:#281a12;padding:8px;border-radius:12px}.wc-gallery img{aspect-ratio:3/4;object-fit:cover}.wc-gallery input,.wc-gallery button{max-width:100%;font-size:.8rem}.wc-verified{color:#83caff;font:600 .8rem system-ui}progress{width:100%;accent-color:#b56532}</style>
+.wc-gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.wc-gallery>div{min-width:0;background:#281a12;padding:8px;border-radius:12px}.wc-gallery img{aspect-ratio:3/4;object-fit:cover}.wc-gallery input,.wc-gallery button{max-width:100%;font-size:.8rem}.wc-verified{color:#83caff;font:600 .8rem system-ui}progress{width:100%;accent-color:#b56532}
+#app nav{position:static;inset:auto;display:flex;flex-wrap:wrap;z-index:auto;padding:8px;border-radius:14px}main{padding-bottom:32px}html{scroll-padding-bottom:0}
+@media(max-width:700px){#app nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}}
+#view select{width:100%;padding:11px;border-radius:9px;margin:5px 0;font:inherit;background:#fff2df;color:#21150f;border:1px solid #a77b55}.wc-passions{border:1px solid #795036;border-radius:12px;display:flex;flex-wrap:wrap;gap:8px;padding:10px}.wc-passions label{display:flex;align-items:center;gap:5px;margin:0;padding:5px 8px;background:#513522;border-radius:8px}.wc-passions input{width:auto}.wc-detail{background:linear-gradient(140deg,#493124,#302016)}.wc-gallery{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}.wc-photo-zoom{display:block;width:100%;padding:0;background:transparent;cursor:zoom-in}.wc-photo-zoom img{display:block;margin:0}.wc-lightbox{max-width:94vw;max-height:94vh;background:#281a12;color:#ffe9c9;border:1px solid #b98645;border-radius:14px;padding:12px}.wc-lightbox::backdrop{background:#000c}.wc-lightbox img{display:block;width:auto;max-width:85vw;max-height:75vh;object-fit:contain}.wc-lightbox button{display:block;margin-left:auto}
+</style>
 </head>
 <body>
 <main>
 <header>
 <h1>★ Western Crush</h1>
-<p>Le coup de foudre au Far West • 18+</p><p><small>Version V15.0</small></p>
+<p>Le coup de foudre au Far West • 18+</p><p><small>Version V15.1</small></p>
 </header>
 <p><small>🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.</small></p>
 <p id="status" role="status"></p>
@@ -81,6 +85,6 @@ Je certifie avoir 18 ans ou plus.
 <p><small>© 2026 Western Crush — Tous droits réservés.</small></p>
 </footer>
 </main>
-<script type="module" src="app.js?v=15.0"></script>
+<script type="module" src="app.js?v=15.1"></script>
 </body>
 </html>
