@@ -204,7 +204,7 @@ async function profile() {
   visibility.style.width = 'auto';
   const visibilityLabel = element('label');
   visibilityLabel.append(visibility, document.createTextNode(' Rendre mon profil visible dans Découvrir'));
-  form.append(visibilityLabel, element('p', 'Si vous activez cette option, votre pseudo, âge, ville, département et présentation seront visibles par les membres autorisés. Votre photo reste privée.'));
+  form.append(visibilityLabel, element('p', 'Si vous activez cette option, votre pseudo, âge, ville, département et présentation seront visibles par les membres autorisés. Votre photo peut être consultée par les membres autorisés si votre profil est visible.'));
 
   const save = element('button', 'Enregistrer mon profil');
   form.append(save);
@@ -257,7 +257,7 @@ async function profile() {
   let path = data?.photo_url || null;
 
   const photos = element('div');
-  photos.append(element('h2', 'Ma photo privée'));
+  photos.append(element('h2', 'Ma photo de profil'));
 
   const img = element('img');
   img.alt = 'Ma photo de profil';
@@ -548,6 +548,29 @@ async function premium() {
   );
 }
 
+// Photos des membres : la règle Storage contrôle chaque accès.
+async function memberPhoto(card, target, uid, rev) {
+  const placeholder = element('div', '🤠 Aucune photo disponible');
+  placeholder.className = 'member-placeholder';
+  card.prepend(placeholder);
+  try {
+    const r = await bucket.list(target, {limit: 100});
+    if (r.error || user?.id !== uid || revision !== rev) return;
+    const file = (r.data || []).find(f => f.id && /^[0-9a-f-]+\.(jpg|png|webp)$/i.test(f.name));
+    if (!file) return;
+    const signed = await bucket.createSignedUrl(target + '/' + file.name, 60);
+    if (signed.error || !signed.data?.signedUrl || user?.id !== uid || revision !== rev) return;
+    const img = element('img');
+    img.alt = 'Photo de profil du membre';
+    img.className = 'member-photo';
+    img.referrerPolicy = 'no-referrer';
+    img.onerror = () => { img.remove(); placeholder.hidden = false; };
+    img.onload = () => { placeholder.hidden = true; };
+    card.prepend(img);
+    img.src = signed.data.signedUrl;
+  } catch (_) { /* Le profil reste disponible sans photo. */ }
+}
+
 // DECOUVERTE DES MEMBRES
 async function discover() {
   const uid = user?.id;
@@ -600,6 +623,7 @@ async function discover() {
     }));
     card.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || 'Membre', discover)));
     view.append(card);
+    void memberPhoto(card, target, uid, rev);
   }
 }
 
@@ -653,6 +677,7 @@ async function matches() {
   for (const x of m.data) {
     const name = d.data.find(p => p.id === x.match_id)?.pseudo || 'Membre compatible';
     const card = element('article'); card.append(element('h2', name), actionButton('💬 Envoyer un message', () => conversation(x.match_id, name))); view.append(card);
+    void memberPhoto(card, x.match_id, uid, rev);
   }
 }
 async function conversation(target, name) {
