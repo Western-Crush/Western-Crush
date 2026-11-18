@@ -783,22 +783,54 @@ async function matches() {
 async function conversation(target, name) {
   const uid = user?.id, rev = ++revision, view = $('view');
   if (!uid) return;
+  const current = () => user?.id === uid && revision === rev;
   view.textContent = 'Chargement de la conversation…';
   const m = await db.rpc('get_matches'); check(m.error);
-  if (user?.id !== uid || rev !== revision) return;
+  if (!current()) return;
   if (!m.data.some(x => x.match_id === target)) { await matches(); return; }
-  const r = await db.from('messages').select('sender_id,content,created_at').or(`and(sender_id.eq.${uid},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${uid})`).order('created_at', {ascending:false}).limit(100);
-  check(r.error);
-  if (user?.id !== uid || rev !== revision) return;
-  view.replaceChildren(element('h2', '💬 ' + name), actionButton('Retour aux matchs', matches), actionButton('Actualiser', () => conversation(target,name)));
-  for (const msg of r.data.reverse()) view.append(element('p', (msg.sender_id === uid ? 'Moi : ' : name + ' : ') + msg.content));
-  view.append(actionButton('🚩 Signaler ce membre', () => reportMember(target, name, () => conversation(target,name))));
-  const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message';
-  view.append(input, actionButton('Envoyer', async () => {
-    if (user?.id !== uid || rev !== revision || !input.value.trim()) return;
-    check((await db.from('messages').insert({sender_id:uid,receiver_id:target,content:input.value.trim()})).error);
-    if (user?.id === uid && rev === revision) await conversation(target,name);
-  }));
+  const thread = element('div'); thread.className = 'wc-thread'; thread.setAttribute('role','log'); thread.setAttribute('aria-label','Messages');
+  const info = element('small','Actualisation automatique toutes les 3 secondes');
+  const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message'; input.setAttribute('aria-label','Votre message');
+  let busy = false, reading = false, last = null;
+  async function refresh() {
+    if (!current() || reading) return;
+    reading = true;
+    try {
+      const match = await db.rpc('get_matches'); check(match.error);
+      if (!current()) return;
+      if (!match.data.some(x => x.match_id === target)) { thread.replaceChildren(); await matches(); return; }
+      const r = await db.from('messages').select('id,sender_id,content,created_at').or(`and(sender_id.eq.${uid},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${uid})`).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
+      check(r.error); if (!current()) return;
+      const signature = JSON.stringify(r.data);
+      if (signature !== last) {
+        const bottom = last === null || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
+        const oldTop = thread.scrollTop;
+        thread.replaceChildren();
+        if (!r.data.length) thread.append(element('p','Aucun message. Lancez la conversation !'));
+        for (const msg of r.data.slice().reverse()) {
+          const bubble = element('div'); bubble.className = 'wc-bubble ' + (msg.sender_id === uid ? 'wc-mine' : 'wc-theirs');
+          bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}))); thread.append(bubble);
+        }
+        thread.scrollTop = bottom ? thread.scrollHeight : oldTop; last = signature;
+      }
+      info.textContent = 'Actualisation automatique toutes les 3 secondes';
+    } catch(e) { if(current()){ thread.replaceChildren(); last=null; info.textContent = 'Actualisation impossible. Nouvelle tentative automatique.'; } }
+    finally { reading = false; }
+  }
+  const send = actionButton('Envoyer ➤', async () => {
+    if (!current() || busy || !input.value.trim()) return;
+    busy = true; send.disabled = true;
+    const content = input.value.trim(); input.disabled = true;
+    try {
+      check((await db.from('messages').insert({sender_id:uid,receiver_id:target,content})).error);
+      if(current()){input.value=''; await refresh(); thread.scrollTop=thread.scrollHeight;}
+    } finally { busy=false; send.disabled=false; input.disabled=false; if(current()) input.focus(); }
+  });
+  const composer = element('div'); composer.className='wc-composer'; composer.append(input,send);
+  view.replaceChildren(element('h2','💬 '+name),actionButton('Retour aux matchs',matches),actionButton('Actualiser',refresh),info,thread,composer,actionButton('🚩 Signaler ce membre',()=>reportMember(target,name,()=>conversation(target,name))));
+  await refresh();
+  const tick = async () => { if(!current()) return; if(!document.hidden) await refresh(); if(current()) setTimeout(tick,3000); };
+  if(current()) setTimeout(tick,3000);
 }
 async function blocked() {
   const uid = user?.id, rev = ++revision, view = $('view'); if (!uid) return;
