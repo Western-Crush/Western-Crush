@@ -571,6 +571,40 @@ async function memberPhoto(card, target, uid, rev) {
   } catch (_) { /* Le profil reste disponible sans photo. */ }
 }
 
+// Filtres propres à la session, sans stockage persistant.
+const defaultFilters = () => ({min_age:18,max_age:120,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false});
+let searchFilters = defaultFilters();
+function searchForm() {
+  const form = element('form');
+  form.className = 'search-filters';
+  form.append(element('h2', '🔎 Filtres de recherche'));
+  const fields = {};
+  for (const [key, label, type] of [
+    ['min_age','Âge minimum','number'], ['max_age','Âge maximum','number'],
+    ['wanted_gender','Genre (ex. Femme, Homme)','text'], ['wanted_city','Ville','text'],
+    ['wanted_department','Département','text'], ['with_photo','Uniquement avec photo','checkbox']
+  ]) {
+    const wrap = element('label', label), input = element('input');
+    input.type = type;
+    if (type === 'number') { input.min=18; input.max=120; input.step=1; input.required=true; }
+    if (type === 'text') { input.maxLength=100; input.placeholder='Tous'; }
+    if (type === 'checkbox') input.checked=searchFilters[key]; else input.value=searchFilters[key];
+    fields[key]=input; wrap.append(input); form.append(wrap);
+  }
+  const submit = element('button','Rechercher'); submit.type='submit';
+  const reset = element('button','Réinitialiser'); reset.type='button';
+  reset.onclick=()=>{searchFilters=defaultFilters(); void act(discover);};
+  form.append(submit,reset);
+  form.onsubmit=e=>{ e.preventDefault();
+    const min=Number(fields.min_age.value), max=Number(fields.max_age.value);
+    if (!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>120||min>max) {status('Tranche d’âge invalide.');return;}
+    searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value.trim(),wanted_city:fields.wanted_city.value.trim(),wanted_department:fields.wanted_department.value.trim(),with_photo:fields.with_photo.checked};
+    void act(discover);
+  };
+  form.append(element('small','Genre, ville et département : saisissez le libellé exact du profil.'));
+  return form;
+}
+
 // DECOUVERTE DES MEMBRES
 async function discover() {
   const uid = user?.id;
@@ -578,13 +612,13 @@ async function discover() {
   if (!uid) return;
   const view = $('view');
   view.textContent = 'Chargement des membres…';
-  const { data, error } = await db.rpc('discover_members');
+  const { data, error } = await db.rpc('search_members', searchFilters);
   if (user?.id !== uid || rev !== revision) return;
   if (error) {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  view.replaceChildren(element('h2', '🤠 Découvrir les membres'));
+  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm());
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
@@ -595,7 +629,7 @@ async function discover() {
   if (user?.id !== uid || rev !== revision) return;
   const ownLikes = new Set(liked.data.map(x => x.receiver_id));
   if (!data?.length) {
-    view.append(element('p', 'Aucun profil visible pour le moment.'));
+    view.append(element('p', 'Aucun profil correspondant. Modifiez les filtres.'));
     return;
   }
   for (const member of data) {
@@ -879,7 +913,7 @@ db.auth.onAuthStateChange((event, session) => {
   const previous = user?.id;
   user = session?.user || null;
   adminButton.hidden = true;
-  if (previous !== user?.id) notificationButton.textContent = '🔔 Notifications';
+  if (previous !== user?.id) { notificationButton.textContent = '🔔 Notifications'; searchFilters = defaultFilters(); }
   setTimeout(refreshNotificationCount, 0);
   setTimeout(() => act(syncAdmin), 0);
 
