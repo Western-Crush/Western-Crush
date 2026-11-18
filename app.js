@@ -614,11 +614,11 @@ function searchForm() {
   const lookup=element('input');lookup.placeholder='Ville ou code postal';lookup.maxLength=100;
   const choices=element('div');let request=0;const uid=user?.id,rev=revision;
   form.append(lookup,actionButton('Trouver une commune',async()=>{
-    const q=lookup.value.trim();if(q.length<2)throw Error('Saisissez au moins deux caractères.');
-    const n=++request;choices.textContent='Recherche…';
+    const q=lookup.value.trim(); const n=++request; if(q.length<2){choices.textContent='Saisissez au moins deux caractères pour trouver une commune.'; return;}
+    choices.textContent='Recherche…';
     const r=await db.rpc('search_communes',{search_text:q});
     if(user?.id!==uid||revision!==rev||n!==request)return;
-    check(r.error);choices.replaceChildren();
+    if(r.error){choices.textContent=r.error.message || 'Recherche de commune indisponible.';return;}choices.replaceChildren();
     if(!r.data?.length)choices.textContent='Aucune commune trouvée.';
     for(const c of r.data||[])choices.append(actionButton(c.nom+' ('+c.code_postal+')',async()=>{
       if(user?.id!==uid||revision!==rev||n!==request)return;
@@ -629,8 +629,8 @@ function searchForm() {
   field('radius_km','Rayon autour de ma commune',[['','Toute la France'],...Array.from({length:20},(_,i)=>[String((i+1)*10),((i+1)*10)+' km'])]);
   field('sort_by','Trier par',[['distance','Du plus proche au plus éloigné'],['newest','Nouveaux membres']]);
   const photo=field('with_photo','Uniquement avec photo');photo.type='checkbox';photo.checked=searchFilters.with_photo;
-  const go=element('button','Rechercher');go.type='submit';form.append(go,actionButton('Réinitialiser',async()=>{searchFilters=defaultFilters();await discover();}),actionButton('Choisir ma commune',profile),element('small','Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.'));
-  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};void act(discover);};
+  const go=element('button','Rechercher');go.type='submit';form.append(go,actionButton('Réinitialiser',async()=>{searchFilters=defaultFilters();status('');await discover();}),actionButton('Choisir ma commune',profile),element('small','Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.'));
+  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};status('');void act(discover);};
   return form;
 }
 
