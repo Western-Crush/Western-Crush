@@ -789,11 +789,14 @@ async function conversation(target, name) {
   if (!current()) return;
   if (!m.data.some(x => x.match_id === target)) { await matches(); return; }
   const thread = element('div'); thread.className = 'wc-thread'; thread.setAttribute('role','log'); thread.setAttribute('aria-label','Messages');
-  const info = element('small','Actualisation automatique toutes les 3 secondes');
+  const info = element('small','Connexion au temps réel…');
   const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message'; input.setAttribute('aria-label','Votre message');
   let busy = false, reading = false, last = null;
+  let live = false, pending = false;
+  const mode = () => live ? '● Messagerie en temps réel' : 'Actualisation de secours toutes les 3 secondes';
   async function refresh() {
-    if (!current() || reading) return;
+    if (!current()) return;
+    if (reading) { pending = true; return; }
     reading = true;
     try {
       const match = await db.rpc('get_matches'); check(match.error);
@@ -813,9 +816,9 @@ async function conversation(target, name) {
         }
         thread.scrollTop = bottom ? thread.scrollHeight : oldTop; last = signature;
       }
-      info.textContent = 'Actualisation automatique toutes les 3 secondes';
+      info.textContent = mode();
     } catch(e) { if(current()){ thread.replaceChildren(); last=null; info.textContent = 'Actualisation impossible. Nouvelle tentative automatique.'; } }
-    finally { reading = false; }
+    finally { reading = false; if (pending && current()) { pending = false; queueMicrotask(refresh); } }
   }
   const send = actionButton('Envoyer ➤', async () => {
     if (!current() || busy || !input.value.trim()) return;
@@ -828,9 +831,37 @@ async function conversation(target, name) {
   });
   const composer = element('div'); composer.className='wc-composer'; composer.append(input,send);
   view.replaceChildren(element('h2','💬 '+name),actionButton('Retour aux matchs',matches),actionButton('Actualiser',refresh),info,thread,composer,actionButton('🚩 Signaler ce membre',()=>reportMember(target,name,()=>conversation(target,name))));
+  const channel = db.channel('wc-chat-' + crypto.randomUUID());
+  const onMessage = ({new: row}) => {
+    if (!current() || !row) return;
+    if ((row.sender_id === uid && row.receiver_id === target) ||
+        (row.sender_id === target && row.receiver_id === uid)) void refresh();
+  };
+  channel.on('postgres_changes', {event:'INSERT',schema:'public',table:'messages',filter:'receiver_id=eq.'+uid}, onMessage)
+    .on('postgres_changes', {event:'INSERT',schema:'public',table:'messages',filter:'sender_id=eq.'+uid}, onMessage)
+    .subscribe(state => {
+      if (!current()) return;
+      live = state === 'SUBSCRIBED';
+      info.textContent = mode();
+      if (live) void refresh();
+    });
+  let lastCheck = Date.now();
+  const onVisible = () => { if (current() && !document.hidden) void refresh(); };
+  document.addEventListener('visibilitychange', onVisible);
+  const tick = () => {
+    if (!current()) {
+      document.removeEventListener('visibilitychange', onVisible);
+      void db.removeChannel(channel);
+      return;
+    }
+    // Periodic authorization and missed-event check even when subscribed.
+    if (!document.hidden && (!live || Date.now()-lastCheck >= 15000)) {
+      lastCheck = Date.now(); void refresh();
+    }
+    setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 3000);
   await refresh();
-  const tick = async () => { if(!current()) return; if(!document.hidden) await refresh(); if(current()) setTimeout(tick,3000); };
-  if(current()) setTimeout(tick,3000);
 }
 async function blocked() {
   const uid = user?.id, rev = ++revision, view = $('view'); if (!uid) return;
