@@ -460,6 +460,17 @@ async function premium() {
     ));
   }
 
+  if (active || pending) {
+    const manage = element('button', '⚙️ Gérer mon abonnement');
+    manage.onclick = () => {
+      if (user?.id !== uid || rev !== revision) return;
+      window.location.assign('https://billing.stripe.com/p/login/test_4gMaEWejF8R42SX2MU5AQ00');
+    };
+    info.append(manage, element('p',
+      'Connectez-vous au portail Stripe avec votre adresse e-mail de facturation pour gérer votre offre, vos factures ou votre résiliation. Au retour, actualisez votre abonnement.'
+    ));
+  }
+
   view.append(info);
 
   const plans = [
