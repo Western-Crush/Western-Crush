@@ -655,6 +655,94 @@ async function blocked() {
   })));
 }
 
+
+// ADMINISTRATION : autorisations vérifiées par Supabase (RLS).
+const adminButton = actionButton('🛡️ Administration', administration);
+adminButton.hidden = true;
+$('logout').before(adminButton);
+let adminCheck = 0;
+async function syncAdmin() {
+  const uid = user?.id, token = ++adminCheck;
+  adminButton.hidden = true;
+  if (!uid) return;
+  const r = await db.rpc('is_admin');
+  if (token === adminCheck && user?.id === uid && !r.error && r.data === true) adminButton.hidden = false;
+}
+async function requireAdmin(uid) {
+  if (!uid || user?.id !== uid) throw Error('Session expirée.');
+  const r = await db.rpc('is_admin'); check(r.error);
+  if (r.data !== true || user?.id !== uid) throw Error('Accès administrateur refusé.');
+}
+async function adminRows(table, columns) {
+  const rows = [];
+  for (let start = 0; ; start += 100) {
+    const r = await db.from(table).select(columns).order(table === 'suspended_users' ? 'user_id' : 'id').range(start, start + 99);
+    check(r.error); rows.push(...r.data);
+    if (r.data.length < 100) return rows;
+  }
+}
+async function administration() {
+  const uid = user?.id, rev = ++revision, view = $('view');
+  const current = () => user?.id === uid && rev === revision;
+  view.textContent = 'Vérification des droits administrateur…';
+  try {
+    await requireAdmin(uid);
+    const [members, reports, suspensions, subscriptions] = await Promise.all([
+      adminRows('profiles','id,pseudo,age,city,discoverable'),
+      adminRows('reports','id,reporter_id,reported_id,reason,created_at,reviewed'),
+      adminRows('suspended_users','user_id,reason,suspended_at'),
+      adminRows('subscriptions','id,user_id,plan,status,current_period_end')
+    ]);
+    await requireAdmin(uid);
+    if (!current()) return;
+    const names = new Map(members.map(m => [m.id,m.pseudo || 'Membre']));
+    const name = id => names.get(id) || id;
+    const suspended = new Map(suspensions.map(x => [x.user_id,x]));
+    const active = new Set(subscriptions.filter(x => getActiveSubscription([x])).map(x => x.user_id));
+    view.replaceChildren(element('h2','🛡️ Administration Western Crush'), actionButton('Actualiser', administration));
+    const stats = element('article');
+    stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
+    view.append(stats, element('h2','Gestion des membres'));
+    for (const m of members) {
+      const card = element('article');
+      card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || 'Ville non renseignée'}`), element('p', m.id === uid ? 'Votre compte administrateur' : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : 'Non suspendu'));
+      if (m.id !== uid && !suspended.has(m.id)) card.append(actionButton('Suspendre', async () => {
+        if (!current()) return;
+        const reason = prompt('Motif de suspension (obligatoire) :');
+        if (!reason?.trim() || !confirm('Confirmer la suspension de '+name(m.id)+' ?')) return;
+        await requireAdmin(uid); if (!current()) return;
+        check((await db.from('suspended_users').insert({user_id:m.id,reason:reason.trim().slice(0,500)})).error);
+        if (current()) await administration();
+      }));
+      view.append(card);
+    }
+    view.append(element('h2','Comptes suspendus'));
+    if (!suspensions.length) view.append(element('p','Aucun compte suspendu.'));
+    for (const x of suspensions) {
+      const card = element('article'); card.append(element('p',name(x.user_id)+' — '+x.reason),actionButton('Réactiver', async () => {
+        if (!current() || !confirm('Réactiver ce compte ?')) return;
+        await requireAdmin(uid); if (!current()) return;
+        const r = await db.from('suspended_users').delete().eq('user_id',x.user_id).select('user_id'); check(r.error);
+        if (!r.data.length) throw Error('Aucune suspension supprimée.');
+        if (current()) await administration();
+      })); view.append(card);
+    }
+    view.append(element('h2','Signalements'));
+    if (!reports.length) view.append(element('p','Aucun signalement.'));
+    for (const x of reports) {
+      const card = element('article'); card.append(element('p','Membre signalé : '+name(x.reported_id)),element('p','Auteur : '+name(x.reporter_id)),element('p',x.reason),element('p',x.reviewed?'Traité':'À traiter'));
+      if (!x.reviewed) card.append(actionButton('Marquer comme traité',async () => {
+        if (!current()) return; await requireAdmin(uid); if (!current()) return;
+        const r = await db.from('reports').update({reviewed:true}).eq('id',x.id).select('id'); check(r.error); if (!r.data.length) throw Error('Signalement non modifié.');
+        if (current()) await administration();
+      })); view.append(card);
+    }
+    view.append(element('h2','Abonnements — consultation uniquement'));
+    for (const x of subscriptions) view.append(element('p',`${name(x.user_id)} · ${x.plan} · ${x.status} · ${x.current_period_end ? new Date(x.current_period_end).toLocaleDateString('fr-FR') : '—'}`));
+    if (!subscriptions.length) view.append(element('p','Aucun abonnement.'));
+  } catch (e) { if (current()) view.textContent = 'Administration indisponible.'; throw e; }
+}
+
 // NAVIGATION
 
 document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -685,6 +773,8 @@ if ('serviceWorker' in navigator) {
 db.auth.onAuthStateChange((event, session) => {
   const previous = user?.id;
   user = session?.user || null;
+  adminButton.hidden = true;
+  setTimeout(() => act(syncAdmin), 0);
 
   $('auth').hidden = !!user;
   $('app').hidden = !user;
