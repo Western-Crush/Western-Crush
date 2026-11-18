@@ -661,8 +661,19 @@ async function discover() {
     view.append(element('p', searchFilters.radius_km !== null ? 'Aucun membre localisé dans ce rayon. Vérifiez votre commune et élargissez le rayon.' : 'Aucun profil correspondant. Modifiez les filtres.'));
     return;
   }
-  for (const member of data) {
-    const card = element('article');
+  const deck = element('div'); deck.className = 'wc-deck';
+  view.append(deck);
+  let index = 0;
+  function showCard() {
+    if (user?.id !== uid || rev !== revision) return;
+    deck.replaceChildren();
+    if (index >= data.length) {
+      deck.append(element('p','Vous avez parcouru tous les profils.'), actionButton('Revoir les profils', discover));
+      return;
+    }
+    const member = data[index];
+    deck.append(element('small', `Profil ${index + 1} sur ${data.length}`));
+    const card = element('article'); card.className = 'wc-profile-card';
     card.append(
       element('h2', `${member.pseudo || 'Membre'} — ${member.age} ans`),
       element('p', [member.city, member.department].filter(Boolean).join(' · ')),
@@ -670,7 +681,9 @@ async function discover() {
     );
     if (Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
     const target = member.id;
-    card.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
+    const actions = element('div'); actions.className = 'wc-card-actions';
+    actions.append(actionButton('✕ Passer', async () => { index++; showCard(); }));
+    actions.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
       if (user?.id !== uid) return;
       const result = ownLikes.has(target)
         ? await db.from('likes').delete().eq('sender_id', uid).eq('receiver_id', target)
@@ -679,16 +692,22 @@ async function discover() {
       const m = await db.rpc('get_matches'); check(m.error);
       if (user?.id !== uid || rev !== revision) return;
       status(m.data.some(x => x.match_id === target) ? '💘 C’est un match !' : 'J’aime actualisé.');
-      await discover();
-    }), actionButton('🚫 Bloquer', async () => {
+      if (ownLikes.has(target)) { ownLikes.delete(target); showCard(); }
+      else { ownLikes.add(target); index++; showCard(); }
+    }));
+    card.append(actions);
+    const safety = element('div'); safety.className = 'wc-card-safety';
+    safety.append(actionButton('🚫 Bloquer', async () => {
       if (user?.id !== uid || !confirm('Bloquer ce membre ?')) return;
       check((await db.from('blocks').insert({blocker_id: uid, blocked_id: target})).error);
       if (user?.id === uid && rev === revision) await discover();
     }));
-    card.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || 'Membre', discover)));
-    view.append(card);
+    safety.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || 'Membre', discover)));
+    card.append(safety);
+    deck.append(card);
     void memberPhoto(card, target, uid, rev);
   }
+  showCard();
 }
 
 async function reportMember(target, name, back) {
