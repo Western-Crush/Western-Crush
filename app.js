@@ -634,6 +634,10 @@ function searchForm() {
   return form;
 }
 
+function showMatchCelebration() {
+  document.querySelector('.wc-celebration')?.remove();
+  const banner=element('div','💘 C’est un match !'); banner.className='wc-celebration'; banner.setAttribute('role','status'); document.body.append(banner); setTimeout(()=>banner.remove(),3000);
+}
 // DECOUVERTE DES MEMBRES
 async function discover() {
   const uid = user?.id;
@@ -647,7 +651,8 @@ async function discover() {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm());
+  const filters = element('details'); filters.className = 'wc-filters'; filters.append(element('summary','🔎 Filtres de recherche'), searchForm());
+  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), filters);
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
@@ -682,18 +687,24 @@ async function discover() {
     if (Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
     const target = member.id;
     const actions = element('div'); actions.className = 'wc-card-actions';
-    actions.append(actionButton('✕ Passer', async () => { index++; showCard(); }));
+    let busy = false;
+    actions.append(actionButton('✕ Passer', async () => { if (busy || !card.isConnected || rev !== revision) return; index++; showCard(); }));
     actions.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
-      if (user?.id !== uid) return;
+      if (user?.id !== uid || rev !== revision || !card.isConnected || busy) return;
+      busy = true;
+      try {
       const result = ownLikes.has(target)
         ? await db.from('likes').delete().eq('sender_id', uid).eq('receiver_id', target)
         : await db.from('likes').insert({sender_id: uid, receiver_id: target});
       check(result.error);
       const m = await db.rpc('get_matches'); check(m.error);
       if (user?.id !== uid || rev !== revision) return;
-      status(m.data.some(x => x.match_id === target) ? '💘 C’est un match !' : 'J’aime actualisé.');
+      const matched = !ownLikes.has(target) && m.data.some(x => x.match_id === target);
+      status(matched ? '💘 C’est un match !' : 'J’aime actualisé.');
+      if (matched) showMatchCelebration();
       if (ownLikes.has(target)) { ownLikes.delete(target); showCard(); }
       else { ownLikes.add(target); index++; showCard(); }
+      } finally { busy = false; }
     }));
     card.append(actions);
     const safety = element('div'); safety.className = 'wc-card-safety';
@@ -705,6 +716,12 @@ async function discover() {
     safety.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || 'Membre', discover)));
     card.append(safety);
     deck.append(card);
+    let start = null;
+    card.addEventListener('pointerdown', e => { if (busy || e.button !== 0 || e.target.closest('button')) return; start = {x:e.clientX,y:e.clientY,id:e.pointerId}; card.setPointerCapture(e.pointerId); });
+    card.addEventListener('pointermove', e => { if (start?.id !== e.pointerId) return; const dx=e.clientX-start.x; card.style.transform = `translateX(${Math.max(-100,Math.min(100,dx))}px) rotate(${Math.max(-8,Math.min(8,dx/15))}deg)`; });
+    function resetSwipe(){start=null;card.style.transform='';}
+    card.addEventListener('pointercancel',resetSwipe);
+    card.addEventListener('pointerup', e => { if(start?.id!==e.pointerId)return; const dx=e.clientX-start.x,dy=e.clientY-start.y;resetSwipe();if(busy || Math.abs(dx)<85 || Math.abs(dx)<Math.abs(dy)*1.5)return; if(dx<0)actions.children[0].click(); else if(!ownLikes.has(target))actions.children[1].click(); });
     void memberPhoto(card, target, uid, rev);
   }
   showCard();
