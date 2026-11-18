@@ -572,7 +572,7 @@ async function memberPhoto(card, target, uid, rev) {
 }
 
 // Filtres propres à la session, sans stockage persistant.
-const defaultFilters = () => ({min_age:18,max_age:120,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false});
+const defaultFilters = () => ({min_age:18,max_age:120,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false,radius_km:null,sort_by:'distance'});
 let searchFilters = defaultFilters();
 let nearbyMode = false, nearbyRadius = 50;
 function locationForm(uid, rev) {
@@ -597,43 +597,40 @@ function locationForm(uid, rev) {
   }); };
   return form;
 }
-function proximityForm() {
-  const wrap = element('div'); wrap.append(element('h2','📍 Rencontres à proximité'));
-  const label = element('label','Rayon en kilomètres'); const select = element('select');
-  for (let i=10;i<=200;i+=10) {const o=element('option',i+' km'); o.value=String(i); select.append(o);}
-  select.value=String(nearbyRadius); label.append(select); wrap.append(label);
-  wrap.append(actionButton('Rechercher à proximité', async()=>{nearbyRadius=Number(select.value); nearbyMode=true; await discover();}),actionButton('Choisir ma commune',profile),element('p','La recherche par rayon est distincte des filtres classiques. Distances approximatives à vol d’oiseau.'));
-  if (nearbyMode) wrap.append(actionButton('Revenir aux filtres classiques',async()=>{nearbyMode=false; await discover();}));
-  return wrap;
-}
 function searchForm() {
-  const form = element('form');
-  form.className = 'search-filters';
-  form.append(element('h2', '🔎 Filtres de recherche'));
+  const form = element('form'); form.className = 'search-filters';
+  form.append(element('h2','🔎 Recherche avancée'));
   const fields = {};
-  for (const [key, label, type] of [
-    ['min_age','Âge minimum','number'], ['max_age','Âge maximum','number'],
-    ['wanted_gender','Genre (ex. Femme, Homme)','text'], ['wanted_city','Ville','text'],
-    ['wanted_department','Département','text'], ['with_photo','Uniquement avec photo','checkbox']
-  ]) {
-    const wrap = element('label', label), input = element('input');
-    input.type = type;
-    if (type === 'number') { input.min=18; input.max=120; input.step=1; input.required=true; }
-    if (type === 'text') { input.maxLength=100; input.placeholder='Tous'; }
-    if (type === 'checkbox') input.checked=searchFilters[key]; else input.value=searchFilters[key];
-    fields[key]=input; wrap.append(input); form.append(wrap);
+  function field(key,label,options) {
+    const l=element('label',label), f=element(options?'select':'input');
+    if(options) for(const [value,name] of options){const o=element('option',name);o.value=value;f.append(o);}
+    f.value=searchFilters[key] ?? ''; fields[key]=f;l.append(f);form.append(l);return f;
   }
-  const submit = element('button','Rechercher'); submit.type='submit';
-  const reset = element('button','Réinitialiser'); reset.type='button';
-  reset.onclick=()=>{searchFilters=defaultFilters(); nearbyMode=false; void act(discover);};
-  form.append(submit,reset);
-  form.onsubmit=e=>{ e.preventDefault();
-    const min=Number(fields.min_age.value), max=Number(fields.max_age.value);
-    if (!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>120||min>max) {status('Tranche d’âge invalide.');return;}
-    searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value.trim(),wanted_city:fields.wanted_city.value.trim(),wanted_department:fields.wanted_department.value.trim(),with_photo:fields.with_photo.checked};
-    nearbyMode=false; void act(discover);
-  };
-  form.append(element('small','Genre, ville et département : saisissez le libellé exact du profil.'));
+  for(const [k,label] of [['min_age','Âge minimum'],['max_age','Âge maximum']]){
+    const f=field(k,label);f.type='number';f.min=18;f.max=120;f.required=true;f.value=searchFilters[k];
+  }
+  field('wanted_gender','Genre',[['','Tout le monde'],['femme','Femme'],['homme','Homme'],['autre','Autre']]);
+  const city=field('wanted_city','Ville');city.maxLength=100;
+  const lookup=element('input');lookup.placeholder='Ville ou code postal';lookup.maxLength=100;
+  const choices=element('div');let request=0;const uid=user?.id,rev=revision;
+  form.append(lookup,actionButton('Trouver une commune',async()=>{
+    const q=lookup.value.trim();if(q.length<2)throw Error('Saisissez au moins deux caractères.');
+    const n=++request;choices.textContent='Recherche…';
+    const r=await db.rpc('search_communes',{search_text:q});
+    if(user?.id!==uid||revision!==rev||n!==request)return;
+    check(r.error);choices.replaceChildren();
+    if(!r.data?.length)choices.textContent='Aucune commune trouvée.';
+    for(const c of r.data||[])choices.append(actionButton(c.nom+' ('+c.code_postal+')',async()=>{
+      if(user?.id!==uid||revision!==rev||n!==request)return;
+      city.value=c.nom;const code=String(c.code_insee);fields.wanted_department.value=code.startsWith('97')||code.startsWith('98')?code.slice(0,3):code.slice(0,2);choices.replaceChildren();
+    }));
+  }),choices);
+  const dep=field('wanted_department','Département (code)');dep.maxLength=100;
+  field('radius_km','Rayon autour de ma commune',[['','Toute la France'],...Array.from({length:20},(_,i)=>[String((i+1)*10),((i+1)*10)+' km'])]);
+  field('sort_by','Trier par',[['distance','Du plus proche au plus éloigné'],['newest','Nouveaux membres']]);
+  const photo=field('with_photo','Uniquement avec photo');photo.type='checkbox';photo.checked=searchFilters.with_photo;
+  const go=element('button','Rechercher');go.type='submit';form.append(go,actionButton('Réinitialiser',async()=>{searchFilters=defaultFilters();await discover();}),actionButton('Choisir ma commune',profile),element('small','Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.'));
+  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};void act(discover);};
   return form;
 }
 
@@ -644,13 +641,13 @@ async function discover() {
   if (!uid) return;
   const view = $('view');
   view.textContent = 'Chargement des membres…';
-  const { data, error } = await (nearbyMode ? db.rpc('nearby_members',{radius_km:nearbyRadius}) : db.rpc('search_members', searchFilters));
+  const { data, error } = await db.rpc('search_members_advanced', searchFilters);
   if (user?.id !== uid || rev !== revision) return;
   if (error) {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm(), proximityForm());
+  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm());
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
@@ -661,7 +658,7 @@ async function discover() {
   if (user?.id !== uid || rev !== revision) return;
   const ownLikes = new Set(liked.data.map(x => x.receiver_id));
   if (!data?.length) {
-    view.append(element('p', nearbyMode ? 'Aucun membre localisé dans ce rayon. Vérifiez votre commune et élargissez le rayon.' : 'Aucun profil correspondant. Modifiez les filtres.'));
+    view.append(element('p', searchFilters.radius_km !== null ? 'Aucun membre localisé dans ce rayon. Vérifiez votre commune et élargissez le rayon.' : 'Aucun profil correspondant. Modifiez les filtres.'));
     return;
   }
   for (const member of data) {
@@ -671,7 +668,7 @@ async function discover() {
       element('p', [member.city, member.department].filter(Boolean).join(' · ')),
       element('p', member.bio || 'Aucune présentation.')
     );
-    if (nearbyMode && Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
+    if (Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
     const target = member.id;
     card.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
       if (user?.id !== uid) return;
