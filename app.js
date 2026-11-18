@@ -130,7 +130,7 @@ async function profile() {
 
   const { data, error } = await db
     .from('profiles')
-    .select('pseudo,bio,age,city,department,gender,looking_for,interests,photo_url')
+    .select('pseudo,bio,age,city,department,gender,looking_for,interests,photo_url,discoverable')
     .eq('id', uid)
     .maybeSingle();
 
@@ -198,6 +198,14 @@ async function profile() {
     form.append(l);
   }
 
+  const visibility = element('input');
+  visibility.type = 'checkbox';
+  visibility.checked = data?.discoverable === true;
+  visibility.style.width = 'auto';
+  const visibilityLabel = element('label');
+  visibilityLabel.append(visibility, document.createTextNode(' Rendre mon profil visible dans Découvrir'));
+  form.append(visibilityLabel, element('p', 'Si vous activez cette option, votre pseudo, âge, ville, département et présentation seront visibles par les membres autorisés. Votre photo reste privée.'));
+
   const save = element('button', 'Enregistrer mon profil');
   form.append(save);
   view.append(form);
@@ -231,6 +239,7 @@ async function profile() {
           .upsert({
             id: uid,
             ...values,
+            discoverable: visibility.checked,
             updated_at: new Date().toISOString()
           });
 
@@ -539,6 +548,40 @@ async function premium() {
   );
 }
 
+// DECOUVERTE DES MEMBRES
+async function discover() {
+  const uid = user?.id;
+  const rev = ++revision;
+  if (!uid) return;
+  const view = $('view');
+  view.textContent = 'Chargement des membres…';
+  const { data, error } = await db.rpc('discover_members');
+  if (user?.id !== uid || rev !== revision) return;
+  if (error) {
+    view.textContent = 'Impossible de charger les membres.';
+    check(error);
+  }
+  view.replaceChildren(element('h2', '🤠 Découvrir les membres'));
+  const refresh = element('button', 'Actualiser les profils');
+  refresh.onclick = () => act(discover);
+  const settings = element('button', 'Modifier ma visibilité');
+  settings.onclick = () => act(profile);
+  view.append(refresh, settings);
+  if (!data?.length) {
+    view.append(element('p', 'Aucun profil visible pour le moment.'));
+    return;
+  }
+  for (const member of data) {
+    const card = element('article');
+    card.append(
+      element('h2', `${member.pseudo || 'Membre'} — ${member.age} ans`),
+      element('p', [member.city, member.department].filter(Boolean).join(' · ')),
+      element('p', member.bio || 'Aucune présentation.')
+    );
+    view.append(card);
+  }
+}
+
 // NAVIGATION
 
 document.querySelectorAll('[data-tab]').forEach(btn => {
@@ -547,6 +590,8 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
       await profile();
     } else if (btn.dataset.tab === 'premium') {
       await premium();
+    } else if (['discover', 'decouvrir'].includes(btn.dataset.tab)) {
+      await discover();
     } else {
       revision++;
       $('view').textContent = 'Fonctionnalité en préparation.';
