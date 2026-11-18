@@ -598,8 +598,41 @@ async function discover() {
       check((await db.from('blocks').insert({blocker_id: uid, blocked_id: target})).error);
       if (user?.id === uid && rev === revision) await discover();
     }));
+    card.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || 'Membre', discover)));
     view.append(card);
   }
+}
+
+async function reportMember(target, name, back) {
+  const uid = user?.id, rev = ++revision, view = $('view');
+  if (!uid || !target || uid === target) return;
+  view.replaceChildren(element('h2', '🚩 Signaler ' + name));
+  view.append(element('p', 'Le signalement est transmis à la modération, pas au membre signalé.'));
+  const form = element('form');
+  const label = element('label', 'Motif du signalement');
+  const select = element('select'); select.required = true;
+  select.style.cssText = 'display:block;width:100%;padding:11px;border-radius:9px;margin:8px 0;font:inherit';
+  const placeholder = element('option', 'Choisir un motif'); placeholder.value = ''; select.append(placeholder);
+  for (const reason of ['Faux profil','Harcèlement ou insultes','Suspicion de compte mineur','Arnaque ou escroquerie','Comportement inapproprié','Autre raison']) {
+    const option = element('option', reason); option.value = reason; select.append(option);
+  }
+  label.append(select); form.append(label);
+  const detailsLabel = element('label', 'Informations complémentaires (facultatif)');
+  const details = element('textarea'); details.maxLength = 1000; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
+  const send = element('button', 'Envoyer le signalement'); send.type = 'submit'; form.append(send);
+  form.onsubmit = e => { e.preventDefault(); act(async () => {
+    if (user?.id !== uid || rev !== revision || !select.value || send.disabled) return;
+    send.disabled = true;
+    try {
+      const reason = select.value + (details.value.trim() ? ' — ' + details.value.trim() : '');
+      const result = await db.from('reports').insert({reporter_id:uid, reported_id:target, reason});
+      check(result.error);
+      if (user?.id !== uid || rev !== revision) return;
+      view.replaceChildren(element('h2','Signalement envoyé'), element('p','Merci. Votre signalement a été transmis à la modération.'), actionButton('Retour',back));
+      status('Signalement enregistré.');
+    } finally { send.disabled = false; }
+  }); };
+  view.append(form, actionButton('Annuler',back));
 }
 
 function actionButton(label, fn) {
@@ -634,6 +667,7 @@ async function conversation(target, name) {
   if (user?.id !== uid || rev !== revision) return;
   view.replaceChildren(element('h2', '💬 ' + name), actionButton('Retour aux matchs', matches), actionButton('Actualiser', () => conversation(target,name)));
   for (const msg of r.data.reverse()) view.append(element('p', (msg.sender_id === uid ? 'Moi : ' : name + ' : ') + msg.content));
+  view.append(actionButton('🚩 Signaler ce membre', () => reportMember(target, name, () => conversation(target,name))));
   const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message';
   view.append(input, actionButton('Envoyer', async () => {
     if (user?.id !== uid || rev !== revision || !input.value.trim()) return;
