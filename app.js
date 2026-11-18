@@ -462,12 +462,39 @@ async function premium() {
 
   if (active || pending) {
     const manage = element('button', '⚙️ Gérer mon abonnement');
-    manage.onclick = () => {
-      if (user?.id !== uid || rev !== revision) return;
-      window.location.assign('https://billing.stripe.com/p/login/test_4gMaEWejF8R42SX2MU5AQ00');
-    };
+    manage.onclick = () => act(async () => {
+      if (manage.disabled || user?.id !== uid || rev !== revision) return;
+      manage.disabled = true;
+      let navigating = false;
+      try {
+        status('Ouverture du portail Stripe…');
+        const { data: { session }, error: sessionError } = await db.auth.getSession();
+        check(sessionError);
+        if (!session?.access_token || session.user.id !== uid)
+          throw Error('Reconnectez-vous pour gérer votre abonnement.');
+        if (user?.id !== uid || rev !== revision) return;
+        const { data, error } = await db.functions.invoke('create-portal-session', {
+          body: {},
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (error) {
+          let message;
+          try { message = (await error.context.json()).error; } catch (_) {}
+          throw Error(message || 'Impossible d’ouvrir le portail Stripe.');
+        }
+        if (!data?.url) throw Error('Portail Stripe indisponible.');
+        const url = new URL(data.url);
+        if (url.origin !== 'https://billing.stripe.com')
+          throw Error('Adresse du portail invalide.');
+        if (user?.id !== uid || rev !== revision) return;
+        window.location.assign(url.href);
+        navigating = true;
+      } finally {
+        if (!navigating) manage.disabled = false;
+      }
+    });
     info.append(manage, element('p',
-      'Connectez-vous au portail Stripe avec votre adresse e-mail de facturation pour gérer votre offre, vos factures ou votre résiliation. Au retour, actualisez votre abonnement.'
+      'Accédez directement à votre portail Stripe pour gérer votre offre, vos factures ou votre résiliation. Au retour, actualisez votre abonnement.'
     ));
   }
 
