@@ -566,7 +566,11 @@ async function discover() {
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
   settings.onclick = () => act(profile);
-  view.append(refresh, settings);
+  view.append(refresh, settings, actionButton('💘 Mes matchs', matches), actionButton('🚫 Mes blocages', blocked));
+  const liked = await db.from('likes').select('receiver_id').eq('sender_id', uid);
+  check(liked.error);
+  if (user?.id !== uid || rev !== revision) return;
+  const ownLikes = new Set(liked.data.map(x => x.receiver_id));
   if (!data?.length) {
     view.append(element('p', 'Aucun profil visible pour le moment.'));
     return;
@@ -578,8 +582,77 @@ async function discover() {
       element('p', [member.city, member.department].filter(Boolean).join(' · ')),
       element('p', member.bio || 'Aucune présentation.')
     );
+    const target = member.id;
+    card.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
+      if (user?.id !== uid) return;
+      const result = ownLikes.has(target)
+        ? await db.from('likes').delete().eq('sender_id', uid).eq('receiver_id', target)
+        : await db.from('likes').insert({sender_id: uid, receiver_id: target});
+      check(result.error);
+      const m = await db.rpc('get_matches'); check(m.error);
+      if (user?.id !== uid || rev !== revision) return;
+      status(m.data.some(x => x.match_id === target) ? '💘 C’est un match !' : 'J’aime actualisé.');
+      await discover();
+    }), actionButton('🚫 Bloquer', async () => {
+      if (user?.id !== uid || !confirm('Bloquer ce membre ?')) return;
+      check((await db.from('blocks').insert({blocker_id: uid, blocked_id: target})).error);
+      if (user?.id === uid && rev === revision) await discover();
+    }));
     view.append(card);
   }
+}
+
+function actionButton(label, fn) {
+  const b = element('button', label); b.type = 'button';
+  b.onclick = () => act(async () => { b.disabled = true; try { await fn(); } finally { b.disabled = false; } });
+  return b;
+}
+
+async function matches() {
+  const uid = user?.id, rev = ++revision, view = $('view');
+  if (!uid) return;
+  view.textContent = 'Chargement des matchs…';
+  const m = await db.rpc('get_matches'); check(m.error);
+  const d = await db.rpc('discover_members'); check(d.error);
+  if (user?.id !== uid || rev !== revision) return;
+  view.replaceChildren(element('h2', '💘 Mes matchs'), actionButton('Actualiser', matches), actionButton('Découvrir', discover));
+  if (!m.data.length) view.append(element('p', 'Aucun match pour le moment.'));
+  for (const x of m.data) {
+    const name = d.data.find(p => p.id === x.match_id)?.pseudo || 'Membre compatible';
+    const card = element('article'); card.append(element('h2', name), actionButton('💬 Envoyer un message', () => conversation(x.match_id, name))); view.append(card);
+  }
+}
+async function conversation(target, name) {
+  const uid = user?.id, rev = ++revision, view = $('view');
+  if (!uid) return;
+  view.textContent = 'Chargement de la conversation…';
+  const m = await db.rpc('get_matches'); check(m.error);
+  if (user?.id !== uid || rev !== revision) return;
+  if (!m.data.some(x => x.match_id === target)) { await matches(); return; }
+  const r = await db.from('messages').select('sender_id,content,created_at').or(`and(sender_id.eq.${uid},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${uid})`).order('created_at', {ascending:false}).limit(100);
+  check(r.error);
+  if (user?.id !== uid || rev !== revision) return;
+  view.replaceChildren(element('h2', '💬 ' + name), actionButton('Retour aux matchs', matches), actionButton('Actualiser', () => conversation(target,name)));
+  for (const msg of r.data.reverse()) view.append(element('p', (msg.sender_id === uid ? 'Moi : ' : name + ' : ') + msg.content));
+  const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message';
+  view.append(input, actionButton('Envoyer', async () => {
+    if (user?.id !== uid || rev !== revision || !input.value.trim()) return;
+    check((await db.from('messages').insert({sender_id:uid,receiver_id:target,content:input.value.trim()})).error);
+    if (user?.id === uid && rev === revision) await conversation(target,name);
+  }));
+}
+async function blocked() {
+  const uid = user?.id, rev = ++revision, view = $('view'); if (!uid) return;
+  view.textContent = 'Chargement…';
+  const r = await db.from('blocks').select('blocked_id').eq('blocker_id',uid); check(r.error);
+  if (user?.id !== uid || rev !== revision) return;
+  view.replaceChildren(element('h2','Membres bloqués'), actionButton('Retour',discover));
+  if (!r.data.length) view.append(element('p','Aucun membre bloqué.'));
+  r.data.forEach((x,i) => view.append(element('p', 'Membre bloqué ' + (i+1) + ' — ' + x.blocked_id), actionButton('Débloquer', async () => {
+    if (user?.id !== uid || rev !== revision) return;
+    check((await db.from('blocks').delete().eq('blocker_id',uid).eq('blocked_id',x.blocked_id)).error);
+    if (user?.id === uid && rev === revision) await blocked();
+  })));
 }
 
 // NAVIGATION
@@ -592,6 +665,8 @@ document.querySelectorAll('[data-tab]').forEach(btn => {
       await premium();
     } else if (['discover', 'decouvrir'].includes(btn.dataset.tab)) {
       await discover();
+    } else if (['matches','match','messages','chat','messagerie'].includes(btn.dataset.tab)) {
+      await matches();
     } else {
       revision++;
       $('view').textContent = 'Fonctionnalité en préparation.';
