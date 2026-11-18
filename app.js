@@ -130,7 +130,7 @@ async function profile() {
 
   const { data, error } = await db
     .from('profiles')
-    .select('pseudo,bio,age,city,department,gender,looking_for,interests,photo_url,discoverable')
+    .select('pseudo,bio,age,city,department,gender,looking_for,interests,western_style,relationship_goal,photo_url,discoverable')
     .eq('id', uid)
     .maybeSingle();
 
@@ -169,7 +169,9 @@ async function profile() {
     ['department', 'Département', 100],
     ['gender', 'Genre', 80],
     ['looking_for', 'Personne recherchée', 100],
-    ['interests', 'Centres d’intérêt', 500],
+    ['interests', 'Centres d’intérêt (séparés par des virgules)', 500],
+    ['western_style', 'Style Country et Western', 100],
+    ['relationship_goal', 'Relation recherchée', 100],
     ['bio', 'Présentation', 1000]
   ]) {
     const l = element('label', label);
@@ -274,6 +276,8 @@ async function profile() {
 
   photos.append(upload, remove);
   view.append(photos);
+  const gallery = element('article'); view.append(gallery);
+  void renderGallery(gallery, uid, true, uid, rev).catch(e => { gallery.textContent = e.message; });
 
   async function preview() {
     img.hidden = true;
@@ -706,7 +710,8 @@ async function discover() {
       else { ownLikes.add(target); index++; showCard(); }
       } finally { busy = false; }
     }));
-    card.append(actions);
+    card.append(actions, actionButton('Voir le profil détaillé', () => detailedProfile(target, member.pseudo, discover)));
+    void renderBadge(card, target, uid, rev);
     const safety = element('div'); safety.className = 'wc-card-safety';
     safety.append(actionButton('🚫 Bloquer', async () => {
       if (user?.id !== uid || !confirm('Bloquer ce membre ?')) return;
@@ -785,6 +790,8 @@ async function matches() {
       showPresence(presence,o);
       const msg=l.data?.[0]; preview.textContent=l.error?'Aperçu indisponible':msg?(msg.sender_id===uid?'Vous : ':'')+msg.content.slice(0,150):'Aucun message';
     }).catch(()=>{preview.textContent='Aperçu indisponible';});
+    card.append(actionButton('Voir le profil détaillé', () => detailedProfile(x.match_id, name, matches)));
+    void renderBadge(card, x.match_id, uid, rev);
     void memberPhoto(card, x.match_id, uid, rev);
   }
 }
@@ -966,6 +973,14 @@ async function administration() {
         check((await db.from('suspended_users').insert({user_id:m.id,reason:reason.trim().slice(0,500)})).error);
         if (current()) await administration();
       }));
+      const cert = await db.rpc('is_profile_verified',{other_user:m.id});
+      if (!current()) return;
+      if (!cert.error) card.append(element('p',cert.data?'✓ Profil vérifié':'Profil non vérifié'),actionButton(cert.data?'Retirer la certification':'Certifier le profil',async()=>{
+        if(!current() || !confirm(cert.data?'Retirer le badge ?':'Confirmer que ce profil a été contrôlé ?'))return;
+        await requireAdmin(uid); if(!current())return;
+        check((await db.rpc('set_profile_verified',{target_user:m.id,verified:!cert.data})).error);
+        if(current())await administration();
+      }));
       view.append(card);
     }
     view.append(element('h2','Comptes suspendus'));
@@ -1119,3 +1134,60 @@ setInterval(()=>{void heartbeat().catch(()=>{});},30000);
 setInterval(()=>{void refreshUnread().catch(()=>{});},5000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});}});
 db.auth.onAuthStateChange(()=>{setTimeout(()=>{void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});},0);});
+
+// V15 — galleries and detailed profiles
+async function renderBadge(card,target,uid,rev){
+  try { const r=await db.rpc('is_profile_verified',{other_user:target});
+    if(!r.error && r.data && user?.id===uid && revision===rev && card.isConnected){const b=element('span',' ✓ Vérifié par la modération');b.className='wc-verified';card.querySelector('h2')?.append(b);}
+  } catch {}
+}
+async function renderGallery(panel,target,own,uid,rev){
+  const current=()=>user?.id===uid && revision===rev && panel.isConnected;
+  const storage=db.storage.from('profile-gallery');
+  const r=await db.from('profile_photos').select('id,photo_url,position').eq('user_id',target).order('position');
+  if(!current())return; check(r.error);
+  panel.replaceChildren(element('h2',own?'Ma galerie (6 photos supplémentaires)':'Galerie privée'));
+  panel.append(element('small',own?'Visible par vos matchs autorisés. JPEG, PNG ou WebP, 5 Mo maximum.':'Photos accessibles uniquement aux matchs autorisés.'));
+  const grid=element('div');grid.className='wc-gallery';panel.append(grid);
+  for(let pos=1;pos<=6;pos++){
+    const row=r.data.find(x=>x.position===pos); if(!row&&!own)continue;
+    const cell=element('div');grid.append(cell);
+    if(row){
+      const pic=element('img');pic.alt='Photo '+pos;pic.referrerPolicy='no-referrer';
+      const signed=await storage.createSignedUrl(row.photo_url,60);if(!current())return;
+      if(!signed.error){pic.src=signed.data.signedUrl;cell.append(pic);}else cell.append(element('p','Photo indisponible'));
+      if(own)cell.append(actionButton('Supprimer',async()=>{
+        if(!current()||!confirm('Supprimer cette photo ?'))return;
+        check((await storage.remove([row.photo_url])).error);
+        check((await db.from('profile_photos').delete().eq('id',row.id).eq('user_id',uid)).error);
+        if(current())await renderGallery(panel,target,own,uid,rev);
+      }));
+    }else{
+      const input=element('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';input.setAttribute('aria-label','Photo '+pos);
+      cell.append(element('small','Photo '+pos),input,actionButton('Ajouter',async()=>{
+        if(!current())return;const f=input.files[0];const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[f?.type];
+        if(!f||!ext||f.size>5242880)throw Error('Choisissez une image JPEG, PNG ou WebP de 5 Mo maximum.');
+        const path=uid+'/'+crypto.randomUUID()+'.'+ext;
+        check((await storage.upload(path,f,{contentType:f.type,upsert:false})).error);
+        const result=await db.from('profile_photos').insert({user_id:uid,photo_url:path,position:pos});
+        if(result.error){await storage.remove([path]);check(result.error);}
+        if(current())await renderGallery(panel,target,own,uid,rev);
+      }));
+    }
+  }
+  if(!own&&!r.data.length)panel.append(element('p','Aucune photo supplémentaire accessible.'));
+}
+async function detailedProfile(target,name,back){
+  const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
+  const current=()=>user?.id===uid && revision===rev;
+  view.replaceChildren(actionButton('← Retour',back),element('p','Chargement du profil…'));
+  const [p,c,m]=await Promise.all([db.from('profiles').select('pseudo,age,city,department,bio,interests,western_style,relationship_goal').eq('id',target).maybeSingle(),db.rpc('compatibility_score',{other_user:target}),db.rpc('get_matches')]);
+  if(!current())return;
+  view.replaceChildren(actionButton('← Retour',back));
+  if(p.error||!p.data){view.append(element('p','Profil détaillé indisponible selon les autorisations.'));return;}
+  const x=p.data,card=element('article');card.append(element('h2',`${x.pseudo||name} — ${x.age} ans`),element('p',[x.city,x.department].filter(Boolean).join(' · ')),element('p',x.bio||'Aucune présentation.'));
+  for(const [label,value] of [['Passions',x.interests],['Style Western',x.western_style],['Relation recherchée',x.relationship_goal]])card.append(element('p',label+' : '+(value||'Non renseigné')));
+  if(!c.error&&c.data!==null){card.append(element('h3',c.data+' % de compatibilité'),element('small','Score indicatif fondé sur les préférences déclarées.'));const bar=element('progress');bar.max=100;bar.value=c.data;card.append(bar);}
+  view.append(card);void memberPhoto(card,target,uid,rev);void renderBadge(card,target,uid,rev);
+  if(!m.error&&m.data.some(x=>x.match_id===target)){const panel=element('article');view.append(panel);await renderGallery(panel,target,false,uid,rev);}else view.append(element('p','Galerie supplémentaire réservée aux matchs.'));
+}
