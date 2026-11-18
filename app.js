@@ -776,7 +776,15 @@ async function matches() {
   if (!m.data.length) view.append(element('p', 'Aucun match pour le moment.'));
   for (const x of m.data) {
     const name = d.data.find(p => p.id === x.match_id)?.pseudo || 'Membre compatible';
-    const card = element('article'); card.append(element('h2', name), actionButton('💬 Envoyer un message', () => conversation(x.match_id, name))); view.append(card);
+    const card = element('article');
+    const presence = element('small','Présence inconnue');
+    const preview = element('p','Chargement du dernier message…');
+    card.append(element('h2', name), presence, preview, actionButton('💬 Envoyer un message', () => conversation(x.match_id, name))); view.append(card);
+    void Promise.all([db.rpc('is_member_online',{other_user:x.match_id}),db.rpc('last_message',{other_user:x.match_id})]).then(([o,l])=>{
+      if(user?.id!==uid || rev!==revision) return;
+      showPresence(presence,o);
+      const msg=l.data?.[0]; preview.textContent=l.error?'Aperçu indisponible':msg?(msg.sender_id===uid?'Vous : ':'')+msg.content.slice(0,150):'Aucun message';
+    }).catch(()=>{preview.textContent='Aperçu indisponible';});
     void memberPhoto(card, x.match_id, uid, rev);
   }
 }
@@ -790,7 +798,22 @@ async function conversation(target, name) {
   if (!m.data.some(x => x.match_id === target)) { await matches(); return; }
   const thread = element('div'); thread.className = 'wc-thread'; thread.setAttribute('role','log'); thread.setAttribute('aria-label','Messages');
   const info = element('small','Connexion au temps réel…');
+  const presence = element('p','Présence inconnue');
+  const typing = element('p'); typing.className='wc-typing';
+  let typingSent=0, typingTimer;
+  function stopTyping(){ clearTimeout(typingTimer); typingSent=0; if(user?.id===uid) void db.rpc('update_typing',{other_user:target,is_typing:false}); }
+  async function refreshIndicators(){
+    const [o,t]=await Promise.all([db.rpc('is_member_online',{other_user:target}),db.rpc('is_member_typing',{other_user:target})]);
+    if(!current())return; showPresence(presence,o); typing.textContent=!t.error&&t.data?name+' est en train d’écrire…':'';
+  }
   const input = element('textarea'); input.maxLength = 1000; input.placeholder = 'Votre message'; input.setAttribute('aria-label','Votre message');
+  input.addEventListener('input',()=>{
+    if(!current())return;
+    if(!input.value.trim()){stopTyping();return;}
+    if(Date.now()-typingSent>2000){typingSent=Date.now();void db.rpc('update_typing',{other_user:target,is_typing:true});}
+    clearTimeout(typingTimer);typingTimer=setTimeout(stopTyping,3500);
+  });
+  input.addEventListener('blur',stopTyping);
   let busy = false, reading = false, last = null;
   let live = false, pending = false;
   const mode = () => live ? '● Messagerie en temps réel' : 'Actualisation de secours toutes les 3 secondes';
@@ -802,8 +825,13 @@ async function conversation(target, name) {
       const match = await db.rpc('get_matches'); check(match.error);
       if (!current()) return;
       if (!match.data.some(x => x.match_id === target)) { thread.replaceChildren(); await matches(); return; }
-      const r = await db.from('messages').select('id,sender_id,content,created_at').or(`and(sender_id.eq.${uid},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${uid})`).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
+      const r = await db.from('messages').select('id,sender_id,content,created_at,read_at').or(`and(sender_id.eq.${uid},receiver_id.eq.${target}),and(sender_id.eq.${target},receiver_id.eq.${uid})`).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(100);
       check(r.error); if (!current()) return;
+      if(!document.hidden && r.data.some(msg=>msg.sender_id!==uid&&!msg.read_at)){
+        const result=await db.rpc('mark_messages_read',{other_user:target});
+        if(!current())return;
+        if(!result.error)void refreshUnread();
+      }
       const signature = JSON.stringify(r.data);
       if (signature !== last) {
         const bottom = last === null || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80;
@@ -812,7 +840,7 @@ async function conversation(target, name) {
         if (!r.data.length) thread.append(element('p','Aucun message. Lancez la conversation !'));
         for (const msg of r.data.slice().reverse()) {
           const bubble = element('div'); bubble.className = 'wc-bubble ' + (msg.sender_id === uid ? 'wc-mine' : 'wc-theirs');
-          bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}))); thread.append(bubble);
+          bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}) + (msg.sender_id===uid?(msg.read_at?' · ✓✓ Lu':' · ✓ Envoyé'):''))); thread.append(bubble);
         }
         thread.scrollTop = bottom ? thread.scrollHeight : oldTop; last = signature;
       }
@@ -826,11 +854,11 @@ async function conversation(target, name) {
     const content = input.value.trim(); input.disabled = true;
     try {
       check((await db.from('messages').insert({sender_id:uid,receiver_id:target,content})).error);
-      if(current()){input.value=''; await refresh(); thread.scrollTop=thread.scrollHeight;}
+      if(current()){input.value=''; stopTyping(); await refresh(); thread.scrollTop=thread.scrollHeight;}
     } finally { busy=false; send.disabled=false; input.disabled=false; if(current()) input.focus(); }
   });
   const composer = element('div'); composer.className='wc-composer'; composer.append(input,send);
-  view.replaceChildren(element('h2','💬 '+name),actionButton('Retour aux matchs',matches),actionButton('Actualiser',refresh),info,thread,composer,actionButton('🚩 Signaler ce membre',()=>reportMember(target,name,()=>conversation(target,name))));
+  view.replaceChildren(element('h2','💬 '+name),actionButton('Retour aux matchs',matches),actionButton('Actualiser',refresh),presence,info,thread,typing,composer,actionButton('🚩 Signaler ce membre',()=>reportMember(target,name,()=>conversation(target,name))));
   const channel = db.channel('wc-chat-' + crypto.randomUUID());
   const onMessage = ({new: row}) => {
     if (!current() || !row) return;
@@ -839,6 +867,7 @@ async function conversation(target, name) {
   };
   channel.on('postgres_changes', {event:'INSERT',schema:'public',table:'messages',filter:'receiver_id=eq.'+uid}, onMessage)
     .on('postgres_changes', {event:'INSERT',schema:'public',table:'messages',filter:'sender_id=eq.'+uid}, onMessage)
+    .on('postgres_changes', {event:'UPDATE',schema:'public',table:'messages',filter:'sender_id=eq.'+uid}, onMessage)
     .subscribe(state => {
       if (!current()) return;
       live = state === 'SUBSCRIBED';
@@ -850,18 +879,19 @@ async function conversation(target, name) {
   document.addEventListener('visibilitychange', onVisible);
   const tick = () => {
     if (!current()) {
-      document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('visibilitychange', onVisible); clearTimeout(typingTimer);
       void db.removeChannel(channel);
       return;
     }
     // Periodic authorization and missed-event check even when subscribed.
-    if (!document.hidden && (!live || Date.now()-lastCheck >= 15000)) {
+    if (!document.hidden) {
+      void refreshIndicators().catch(()=>{});
       lastCheck = Date.now(); void refresh();
     }
     setTimeout(tick, 3000);
   };
   setTimeout(tick, 3000);
-  await refresh();
+  await refresh(); void refreshIndicators().catch(()=>{});
 }
 async function blocked() {
   const uid = user?.id, rev = ++revision, view = $('view'); if (!uid) return;
@@ -1079,3 +1109,13 @@ db.auth.onAuthStateChange((event, session) => {
     $('view').replaceChildren();
   }
 });
+// V14 : présence et compteur de messages privés.
+function showPresence(node,result){node.textContent=result.error?'Présence indisponible':result.data?'● En ligne':'● Hors ligne';node.className=result.data&&!result.error?'wc-online':'wc-offline';}
+const unreadButton=document.querySelector('[data-tab="matches"]');
+let unreadBusy=false;
+async function refreshUnread(){const uid=user?.id;if(!uid){unreadButton.textContent='Matchs';return;}if(unreadBusy)return;unreadBusy=true;try{const r=await db.rpc('unread_messages_count');if(user?.id===uid)unreadButton.textContent='Matchs'+(!r.error&&Number(r.data)>0?' · 💬 '+r.data:'');}finally{unreadBusy=false;}}
+async function heartbeat(){if(user&&!document.hidden)await db.rpc('update_presence');}
+setInterval(()=>{void heartbeat().catch(()=>{});},30000);
+setInterval(()=>{void refreshUnread().catch(()=>{});},5000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});}});
+db.auth.onAuthStateChange(()=>{setTimeout(()=>{void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});},0);});
