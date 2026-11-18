@@ -208,7 +208,7 @@ async function profile() {
 
   const save = element('button', 'Enregistrer mon profil');
   form.append(save);
-  view.append(form);
+  view.append(form, locationForm(uid, rev));
 
   form.onsubmit = e => {
     e.preventDefault();
@@ -574,6 +574,38 @@ async function memberPhoto(card, target, uid, rev) {
 // Filtres propres à la session, sans stockage persistant.
 const defaultFilters = () => ({min_age:18,max_age:120,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false});
 let searchFilters = defaultFilters();
+let nearbyMode = false, nearbyRadius = 50;
+function locationForm(uid, rev) {
+  const form = element('form');
+  form.append(element('h2', '📍 Ma commune'), element('p', 'Choisissez votre commune pour activer la recherche à proximité. Seul le centre de la commune est enregistré, sans GPS.'));
+  const input = element('input'); input.placeholder = 'Ville ou code postal'; input.required = true; input.minLength = 2; input.maxLength = 100;
+  const go = element('button', 'Chercher une commune'); go.type = 'submit';
+  const results = element('div'); form.append(input, go, results);
+  let request = 0;
+  form.onsubmit = e => { e.preventDefault(); void act(async () => {
+    const n = ++request; results.textContent = 'Recherche…';
+    const r = await db.rpc('search_communes', {search_text:input.value.trim()});
+    if (user?.id !== uid || revision !== rev || n !== request) return;
+    check(r.error); results.replaceChildren();
+    if (!r.data?.length) results.append(element('p','Aucune commune trouvée.'));
+    for (const c of r.data || []) results.append(actionButton(c.nom + ' (' + c.code_postal + ')', async () => {
+      if (user?.id !== uid || revision !== rev || n !== request) return;
+      if (!confirm('Enregistrer cette commune sur votre profil ?')) return;
+      check((await db.rpc('set_member_location',{commune_code:c.code_insee})).error);
+      if (user?.id === uid && revision === rev) {status('Commune enregistrée.'); await profile();}
+    }));
+  }); };
+  return form;
+}
+function proximityForm() {
+  const wrap = element('div'); wrap.append(element('h2','📍 Rencontres à proximité'));
+  const label = element('label','Rayon en kilomètres'); const select = element('select');
+  for (let i=10;i<=200;i+=10) {const o=element('option',i+' km'); o.value=String(i); select.append(o);}
+  select.value=String(nearbyRadius); label.append(select); wrap.append(label);
+  wrap.append(actionButton('Rechercher à proximité', async()=>{nearbyRadius=Number(select.value); nearbyMode=true; await discover();}),actionButton('Choisir ma commune',profile),element('p','La recherche par rayon est distincte des filtres classiques. Distances approximatives à vol d’oiseau.'));
+  if (nearbyMode) wrap.append(actionButton('Revenir aux filtres classiques',async()=>{nearbyMode=false; await discover();}));
+  return wrap;
+}
 function searchForm() {
   const form = element('form');
   form.className = 'search-filters';
@@ -593,13 +625,13 @@ function searchForm() {
   }
   const submit = element('button','Rechercher'); submit.type='submit';
   const reset = element('button','Réinitialiser'); reset.type='button';
-  reset.onclick=()=>{searchFilters=defaultFilters(); void act(discover);};
+  reset.onclick=()=>{searchFilters=defaultFilters(); nearbyMode=false; void act(discover);};
   form.append(submit,reset);
   form.onsubmit=e=>{ e.preventDefault();
     const min=Number(fields.min_age.value), max=Number(fields.max_age.value);
     if (!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>120||min>max) {status('Tranche d’âge invalide.');return;}
     searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value.trim(),wanted_city:fields.wanted_city.value.trim(),wanted_department:fields.wanted_department.value.trim(),with_photo:fields.with_photo.checked};
-    void act(discover);
+    nearbyMode=false; void act(discover);
   };
   form.append(element('small','Genre, ville et département : saisissez le libellé exact du profil.'));
   return form;
@@ -612,13 +644,13 @@ async function discover() {
   if (!uid) return;
   const view = $('view');
   view.textContent = 'Chargement des membres…';
-  const { data, error } = await db.rpc('search_members', searchFilters);
+  const { data, error } = await (nearbyMode ? db.rpc('nearby_members',{radius_km:nearbyRadius}) : db.rpc('search_members', searchFilters));
   if (user?.id !== uid || rev !== revision) return;
   if (error) {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm());
+  view.replaceChildren(element('h2', '🤠 Découvrir les membres'), searchForm(), proximityForm());
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
@@ -629,7 +661,7 @@ async function discover() {
   if (user?.id !== uid || rev !== revision) return;
   const ownLikes = new Set(liked.data.map(x => x.receiver_id));
   if (!data?.length) {
-    view.append(element('p', 'Aucun profil correspondant. Modifiez les filtres.'));
+    view.append(element('p', nearbyMode ? 'Aucun membre localisé dans ce rayon. Vérifiez votre commune et élargissez le rayon.' : 'Aucun profil correspondant. Modifiez les filtres.'));
     return;
   }
   for (const member of data) {
@@ -639,6 +671,7 @@ async function discover() {
       element('p', [member.city, member.department].filter(Boolean).join(' · ')),
       element('p', member.bio || 'Aucune présentation.')
     );
+    if (nearbyMode && Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
     const target = member.id;
     card.append(actionButton(ownLikes.has(target) ? 'Retirer mon J’aime' : '❤️ J’aime', async () => {
       if (user?.id !== uid) return;
@@ -913,7 +946,7 @@ db.auth.onAuthStateChange((event, session) => {
   const previous = user?.id;
   user = session?.user || null;
   adminButton.hidden = true;
-  if (previous !== user?.id) { notificationButton.textContent = '🔔 Notifications'; searchFilters = defaultFilters(); }
+  if (previous !== user?.id) { notificationButton.textContent = '🔔 Notifications'; searchFilters = defaultFilters(); nearbyMode=false; nearbyRadius=50; }
   setTimeout(refreshNotificationCount, 0);
   setTimeout(() => act(syncAdmin), 0);
 
