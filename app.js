@@ -343,8 +343,7 @@ async function profile() {
           .upsert({
             id: uid,
             ...values,
-            discoverable: visibility.checked,
-            updated_at: new Date().toISOString()
+            discoverable: visibility.checked
           });
 
         check(error);
