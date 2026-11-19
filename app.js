@@ -1350,7 +1350,16 @@ async function renderGallery(panel,target,own,uid,rev){
         status('Suppression de la photo : vérification…');
         try {
           if(!panel.isConnected || !own || target!==uid || user?.id!==uid)throw Error('Session ou galerie inactive. Ouvrez de nouveau votre profil.');
-          if(!confirm('Supprimer cette photo ?')){feedback.textContent='Suppression annulée.';status('Suppression annulée.');return;}
+          const confirmed=await new Promise(resolve=>{
+            const dialog=element('dialog');dialog.className='wc-lightbox';
+            const yes=element('button','Confirmer la suppression');yes.type='button';
+            const no=element('button','Annuler');no.type='button';
+            dialog.append(element('h2','Supprimer cette photo ?'),element('p','Cette photo sera définitivement supprimée de votre galerie.'),yes,no);
+            yes.onclick=()=>dialog.close('yes');no.onclick=()=>dialog.close('no');
+            dialog.addEventListener('close',()=>{const ok=dialog.returnValue==='yes';dialog.remove();resolve(ok);},{once:true});
+            document.body.append(dialog);try{dialog.showModal();no.focus();}catch(e){dialog.remove();resolve(false);}
+          });
+          if(!confirmed){feedback.textContent='Suppression annulée.';status('Suppression annulée.');return;}
           const session=await db.auth.getSession();
           if(session.error)throw Error('Session : '+session.error.message);
           if(session.data.session?.user.id!==uid || user?.id!==uid || !panel.isConnected)throw Error('Session expirée ou profil fermé. Reconnectez-vous.');
