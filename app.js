@@ -240,6 +240,7 @@ async function profile() {
   const privacyRetry = element('button', 'Actualiser le statut');
   privacyRetry.type = 'button';
   privacyRetry.hidden = true;
+  let profileExists = !!data;
   let privacyBusy = false, privacyEnabled = false, privacyReady = false;
   const privacyCurrent = () => user?.id === uid && rev === revision && privacy.isConnected;
 
@@ -263,7 +264,7 @@ async function profile() {
       const result = await db.rpc('get_my_invisible_mode');
       if (!privacyCurrent()) return;
       check(result.error);
-      if (typeof result.data !== 'boolean' || !data) {
+      if (typeof result.data !== 'boolean' || !profileExists) {
         privacyState.textContent = 'Enregistrez votre profil avant d’activer le mode invisible.';
         privacyButton.textContent = 'Mode invisible';
         return;
@@ -338,15 +339,13 @@ async function profile() {
             values.age > 120)
           throw Error('Pseudo et âge valide obligatoires.');
 
-        const { error } = await db
-          .from('profiles')
-          .upsert({
-            id: uid,
-            ...values,
-            discoverable: visibility.checked
-          });
+        const payload = { ...values, discoverable: visibility.checked };
+        const result = profileExists
+          ? await db.from('profiles').update(payload).eq('id', uid).select('id').single()
+          : await db.from('profiles').insert({ id: uid, ...payload }).select('id').single();
 
-        check(error);
+        check(result.error);
+        profileExists = true;
         status('Profil enregistré.');
         if (privacyCurrent() && !privacyBusy) void refreshPrivacy();
 
