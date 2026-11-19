@@ -11,6 +11,7 @@ const site = 'https://western-crush.github.io/Western-Crush/';
 const status = m => $('status').textContent = m;
 
 let user = null, revision = 0;
+let recovering = false;
 
 function check(e) {
   if (e) throw e;
@@ -67,6 +68,39 @@ $('login').onclick = () => act(async () => {
   $('password').value = '';
   status('Connexion réussie.');
 });
+
+const forgot = document.createElement('button');
+forgot.type='button'; forgot.textContent='Mot de passe oublié';
+$('login').after(forgot);
+forgot.onclick=()=>act(async()=>{
+ const email=$('email').value.trim();
+ if(!email||!$('email').validity.valid)throw Error('Saisissez votre adresse email.');
+ forgot.disabled=true;
+ try {
+ const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:site});
+ if(error&&error.status===429)throw Error('Trop de demandes. Réessayez plus tard.');
+ if(error&&error.status>=500)throw Error('Service email indisponible.');
+ status('Si votre compte existe, vous recevrez un lien de réinitialisation.');
+ } finally {forgot.disabled=false;}
+});
+function showRecovery(){
+ const auth=$('auth'), app=$('app');
+ auth.hidden=true;app.hidden=true;
+ if($('wc-recovery'))return;
+ const form=document.createElement('form');form.id='wc-recovery';
+ const title=element('h2','Nouveau mot de passe');
+ const p=document.createElement('input');p.type='password';p.autocomplete='new-password';p.minLength=12;p.required=true;p.placeholder='12 caractères minimum';
+ const q=p.cloneNode();q.placeholder='Confirmez le mot de passe';
+ const save=element('button','Enregistrer le nouveau mot de passe');save.type='submit';
+ const cancel=element('button','Annuler');cancel.type='button';
+ cancel.onclick=()=>act(async()=>{check((await db.auth.signOut()).error);recovering=false;form.remove();auth.hidden=false;});
+ form.append(title,p,q,save,cancel);auth.after(form);
+ form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+ if(p.value.length<12||p.value!==q.value)throw Error('Les mots de passe doivent correspondre et contenir 12 caractères minimum.');
+ save.disabled=true;
+ try{check((await db.auth.updateUser({password:p.value})).error);p.value=q.value='';check((await db.auth.signOut()).error);recovering=false;form.remove();auth.hidden=false;status('Mot de passe modifié. Reconnectez-vous.');}finally{save.disabled=false;}
+ });};
+}
 
 $('logout').onclick = () => act(async () => {
   const { error } = await db.auth.signOut();
@@ -1285,6 +1319,8 @@ if ('serviceWorker' in navigator) {
 // AUTHENTIFICATION
 
 db.auth.onAuthStateChange((event, session) => {
+  if(event==='PASSWORD_RECOVERY') recovering=true;
+  if(recovering){user=null;revision++;if(session)showRecovery();return;}
   const previous = user?.id;
   user = session?.user || null;
   adminButton.hidden = true;
