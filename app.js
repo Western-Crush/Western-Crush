@@ -952,12 +952,13 @@ async function matches() {
   if (!uid) return;
   view.textContent = 'Chargement des matchs…';
   const m = await db.rpc('get_matches'); check(m.error);
-  const d = await db.rpc('discover_members'); check(d.error);
+  const ids = m.data.map(x => x.match_id);
+  const d = ids.length ? await db.from('profiles').select('id,pseudo').in('id', ids) : {data:[],error:null};
   if (user?.id !== uid || rev !== revision) return;
   view.replaceChildren(element('h2', '💘 Mes matchs'), actionButton('Actualiser', matches), actionButton('Découvrir', discover));
   if (!m.data.length) view.append(element('p', 'Aucun match pour le moment.'));
   for (const x of m.data) {
-    const name = d.data.find(p => p.id === x.match_id)?.pseudo || 'Membre compatible';
+    const name = d.data?.find(p => p.id === x.match_id)?.pseudo || 'Membre compatible';
     const card = element('article');
     const presence = element('small','Présence inconnue');
     const preview = element('p','Chargement du dernier message…');
