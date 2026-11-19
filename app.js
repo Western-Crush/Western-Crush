@@ -653,7 +653,7 @@ async function memberPhoto(card, target, uid, rev) {
 }
 
 // Filtres propres à la session, sans stockage persistant.
-const defaultFilters = () => ({min_age:18,max_age:120,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false,radius_km:null,sort_by:'distance'});
+const defaultFilters = () => ({min_age:18,max_age:90,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false,radius_km:null,sort_by:'distance'});
 let searchFilters = defaultFilters();
 let nearbyMode = false, nearbyRadius = 50;
 function locationForm(uid, rev) {
@@ -678,7 +678,7 @@ function locationForm(uid, rev) {
   }); };
   return form;
 }
-function searchForm() {
+function searchForm(paid) {
   const form = element('form'); form.className = 'search-filters';
   form.append(element('h2','🔎 Recherche avancée'));
   const fields = {};
@@ -688,7 +688,7 @@ function searchForm() {
     f.value=searchFilters[key] ?? ''; fields[key]=f;l.append(f);form.append(l);return f;
   }
   for(const [k,label] of [['min_age','Âge minimum'],['max_age','Âge maximum']]){
-    const f=field(k,label);f.type='number';f.min=18;f.max=120;f.required=true;f.defaultValue=String(searchFilters[k] ?? defaultFilters()[k]);f.value=f.defaultValue;
+    const f=field(k,label);f.type='number';f.min=18;f.max=90;f.required=true;f.defaultValue=String(searchFilters[k] ?? defaultFilters()[k]);f.value=f.defaultValue;
   }
   field('wanted_gender','Genre',[['','Tout le monde'],['femme','Femme'],['homme','Homme'],['autre','Autre']]);
   const city=field('wanted_city','Ville');city.maxLength=100;
@@ -710,8 +710,9 @@ function searchForm() {
   field('radius_km','Rayon autour de ma commune',[['','Toute la France'],...Array.from({length:20},(_,i)=>[String((i+1)*10),((i+1)*10)+' km'])]);
   field('sort_by','Trier par',[['distance','Du plus proche au plus éloigné'],['newest','Nouveaux membres']]);
   const photo=field('with_photo','Uniquement avec photo');photo.type='checkbox';photo.checked=searchFilters.with_photo;
+  if(!paid){fields.radius_km.value='';fields.sort_by.value='newest';photo.checked=false;for(const f of [fields.radius_km,fields.sort_by,photo])f.disabled=true;form.append(element('p','🔒 Filtres avancés réservés aux abonnés Cowboy et Shérif VIP.'),actionButton('Voir les abonnements',premium));}
   const go=element('button','Rechercher');go.type='submit';form.append(go,actionButton('Réinitialiser',async()=>{searchFilters=defaultFilters();status('');await discover();}),actionButton('Choisir ma commune',profile),element('small','Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.'));
-  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};status('');void act(discover);};
+  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>90||min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};status('');void act(discover);};
   return form;
 }
 
@@ -726,13 +727,17 @@ async function discover() {
   if (!uid) return;
   const view = $('view');
   view.textContent = 'Chargement des membres…';
+  const membership = await db.rpc('my_membership_plan');
+  if(user?.id!==uid || rev!==revision)return;
+  const paid = !membership.error && ['cowboy','vip'].includes(membership.data);
+  if(!paid)searchFilters={...searchFilters,radius_km:null,with_photo:false,sort_by:'newest'};
   const { data, error } = await db.rpc('search_members_advanced', searchFilters);
   if (user?.id !== uid || rev !== revision) return;
   if (error) {
     view.textContent = 'Impossible de charger les membres.';
     check(error);
   }
-  const filters = element('details'); filters.className = 'wc-filters'; filters.open = false; filters.append(element('summary','🔎 Filtres de recherche'), searchForm());
+  const filters = element('details'); filters.className = 'wc-filters'; filters.open = false; filters.append(element('summary','🔎 Filtres de recherche'), searchForm(paid));
   view.replaceChildren(element('h2', '🤠 Découvrir les membres'), filters);
   const quota = element('p','Chargement des likes…');
   view.prepend(quota);
