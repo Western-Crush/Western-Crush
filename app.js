@@ -77,7 +77,7 @@ function element(tag, text) {
 async function getSubscriptions(uid) {
   const { data, error } = await db
     .from('subscriptions')
-    .select('plan,status,current_period_end')
+    .select('plan,status,current_period_end,next_plan,next_plan_at,cancel_at_period_end,cancel_at')
     .eq('user_id', uid);
 
   check(error);
@@ -452,6 +452,28 @@ async function premium() {
           .toLocaleDateString('fr-FR')
       )
     );
+    const changeAt = new Date(active.next_plan_at || 0);
+    const next = {
+      cowboy: { name: '🤠 Cowboy Premium', price: '9,99 € / mois' },
+      vip: { name: '⭐ Shérif VIP', price: '19,99 € / mois' }
+    }[active.next_plan];
+    const notice = element('div');
+    notice.style.cssText = 'padding:12px;margin:12px 0;border:1px solid #b98645;border-radius:10px;background:#49321f;color:#f6c479';
+    if (active.cancel_at_period_end || active.cancel_at) {
+      const end = new Date(active.cancel_at || active.current_period_end);
+      notice.append(element('strong', '📅 Résiliation programmée'),
+        element('p', 'Fin de votre abonnement : ' + end.toLocaleDateString('fr-FR')));
+      info.append(notice);
+    } else if (next && active.next_plan !== active.plan && changeAt.getTime() > Date.now()) {
+      notice.append(
+        element('strong', '📅 Changement d’abonnement programmé'),
+        element('p', 'Prochaine formule : ' + next.name),
+        element('p', 'Date : ' + changeAt.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})),
+        element('p', 'Prochain tarif : ' + next.price),
+        element('p', 'Vous conservez vos avantages actuels jusqu’au changement de formule.')
+      );
+      info.append(notice);
+    }
   } else {
     info.append(element('p',
       pending
@@ -524,12 +546,15 @@ async function premium() {
     );
 
     const selected = active?.plan === plan.id;
+    const scheduled = !!active && !active.cancel_at_period_end && !active.cancel_at && active.next_plan === plan.id && !selected && new Date(active.next_plan_at || 0).getTime() > Date.now();
 
     const btn = element(
       'button',
       selected
         ? '✓ Abonnement actif'
-        : active || pending
+        : scheduled
+          ? '📅 Changement programmé'
+          : active || pending
           ? 'Abonnement déjà enregistré'
           : "S'abonner — Test"
     );
