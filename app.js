@@ -260,15 +260,15 @@ async function profile() {
         privacyUpgrade.hidden = false;
         return;
       }
-      const result = await db.from('profiles').select('invisible_mode').eq('id', uid).maybeSingle();
+      const result = await db.rpc('get_my_invisible_mode');
       if (!privacyCurrent()) return;
       check(result.error);
-      if (!result.data) {
+      if (typeof result.data !== 'boolean' || !data) {
         privacyState.textContent = 'Enregistrez votre profil avant d’activer le mode invisible.';
         privacyButton.textContent = 'Mode invisible';
         return;
       }
-      privacyEnabled = result.data.invisible_mode === true;
+      privacyEnabled = result.data === true;
       privacyReady = true;
       privacyButton.textContent = privacyEnabled ? 'Désactiver le mode invisible' : 'Activer le mode invisible';
       privacyButton.setAttribute('aria-pressed', String(privacyEnabled));
