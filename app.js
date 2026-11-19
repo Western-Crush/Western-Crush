@@ -1116,6 +1116,21 @@ async function adminRows(table, columns) {
     if (r.data.length < 100) return rows;
   }
 }
+function adminConfirmation(message, needsReason=false) {
+  return new Promise(resolve=>{
+    const dialog=element('dialog'); dialog.className='wc-lightbox';
+    const yes=element('button','Confirmer');yes.type='button';
+    const no=element('button','Annuler');no.type='button';
+    dialog.append(element('h2',message));
+    const reason=element('textarea');reason.maxLength=500;reason.placeholder='Motif obligatoire';reason.setAttribute('aria-label','Motif de suspension');
+    if(needsReason){dialog.append(reason);yes.disabled=true;reason.oninput=()=>{yes.disabled=!reason.value.trim();};}
+    dialog.append(yes,no);
+    yes.onclick=()=>dialog.close('yes');no.onclick=()=>dialog.close('no');
+    dialog.addEventListener('close',()=>{const result=dialog.returnValue==='yes'?(needsReason?reason.value.trim():true):false;dialog.remove();resolve(result);},{once:true});
+    document.body.append(dialog);try{dialog.showModal();no.focus();}catch(e){dialog.remove();resolve(false);}
+  });
+}
+
 async function administration() {
   const uid = user?.id, rev = ++revision, view = $('view');
   const current = () => user?.id === uid && rev === revision;
@@ -1143,18 +1158,21 @@ async function administration() {
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || 'Ville non renseignée'}`), element('p', m.id === uid ? 'Votre compte administrateur' : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : 'Non suspendu'));
       if (m.id !== uid && !suspended.has(m.id)) card.append(actionButton('Suspendre', async () => {
         if (!current()) return;
-        const reason = prompt('Motif de suspension (obligatoire) :');
-        if (!reason?.trim() || !confirm('Confirmer la suspension de '+name(m.id)+' ?')) return;
+        const reason = await adminConfirmation('Suspendre '+name(m.id)+' ?',true);
+        if (!reason) {status('Suspension annulée.');return;}
         await requireAdmin(uid); if (!current()) return;
         check((await db.from('suspended_users').insert({user_id:m.id,reason:reason.trim().slice(0,500)})).error);
+        status('Compte suspendu.');
         if (current()) await administration();
       }));
       const cert = await db.rpc('is_profile_verified',{other_user:m.id});
       if (!current()) return;
       if (!cert.error) card.append(element('p',cert.data?'✓ Profil vérifié':'Profil non vérifié'),actionButton(cert.data?'Retirer la certification':'Certifier le profil',async()=>{
-        if(!current() || !confirm(cert.data?'Retirer le badge ?':'Confirmer que ce profil a été contrôlé ?'))return;
+        if(!current())return;
+        if(!await adminConfirmation(cert.data?'Retirer le badge ?':'Confirmer que ce profil a été contrôlé ?')){status('Action annulée.');return;}
         await requireAdmin(uid); if(!current())return;
         check((await db.rpc('set_profile_verified',{target_user:m.id,verified:!cert.data})).error);
+        status(cert.data?'Certification retirée.':'Profil certifié.');
         if(current())await administration();
       }));
       view.append(card);
@@ -1163,10 +1181,12 @@ async function administration() {
     if (!suspensions.length) view.append(element('p','Aucun compte suspendu.'));
     for (const x of suspensions) {
       const card = element('article'); card.append(element('p',name(x.user_id)+' — '+x.reason),actionButton('Réactiver', async () => {
-        if (!current() || !confirm('Réactiver ce compte ?')) return;
+        if (!current())return;
+        if (!await adminConfirmation('Réactiver '+name(x.user_id)+' ?')){status('Réactivation annulée.');return;}
         await requireAdmin(uid); if (!current()) return;
-        const r = await db.from('suspended_users').delete().eq('user_id',x.user_id).select('user_id'); check(r.error);
-        if (!r.data.length) throw Error('Aucune suspension supprimée.');
+        const r = await db.rpc('reactivate_member',{target_id:x.user_id});check(r.error);
+        if(r.data!==true)throw Error('Aucune suspension supprimée.');
+        status('Compte réactivé avec succès.');
         if (current()) await administration();
       })); view.append(card);
     }
