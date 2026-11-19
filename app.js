@@ -222,9 +222,97 @@ async function profile() {
   visibilityLabel.append(visibility, document.createTextNode(' Rendre mon profil visible dans Découvrir'));
   form.append(visibilityLabel, element('p', 'Si vous activez cette option, votre pseudo, âge, ville, département et présentation seront visibles par les membres autorisés. Votre photo peut être consultée par les membres autorisés si votre profil est visible.'));
 
+  const privacy = element('article');
+  privacy.className = 'wc-invisible';
+  privacy.append(element('h3', '⭐ Mode invisible — Shérif VIP'),
+    element('p', 'Masquez votre profil dans Découvrir et les recherches. Vos matchs existants restent accessibles. Ce réglage est indépendant de la visibilité classique.'));
+  const privacyState = element('p', 'Vérification du statut…');
+  privacyState.setAttribute('role', 'status');
+  const privacyButton = element('button', 'Chargement…');
+  privacyButton.type = 'button';
+  privacyButton.disabled = true;
+  const privacyUpgrade = element('button', 'Voir les abonnements');
+  privacyUpgrade.type = 'button';
+  privacyUpgrade.hidden = true;
+  privacyUpgrade.onclick = () => act(async () => {
+    if (user?.id === uid && rev === revision) await premium();
+  });
+  const privacyRetry = element('button', 'Actualiser le statut');
+  privacyRetry.type = 'button';
+  privacyRetry.hidden = true;
+  let privacyBusy = false, privacyEnabled = false, privacyReady = false;
+  const privacyCurrent = () => user?.id === uid && rev === revision && privacy.isConnected;
+
+  async function refreshPrivacy() {
+    if (!privacyCurrent()) return;
+    privacyReady = false;
+    privacyButton.disabled = true;
+    privacyUpgrade.hidden = true;
+    privacyRetry.hidden = true;
+    privacyState.textContent = 'Vérification du statut…';
+    try {
+      const plan = await db.rpc('my_membership_plan');
+      if (!privacyCurrent()) return;
+      check(plan.error);
+      if (plan.data !== 'vip') {
+        privacyState.textContent = 'Fonctionnalité réservée aux abonnés Shérif VIP.';
+        privacyButton.textContent = '🔒 Mode invisible';
+        privacyUpgrade.hidden = false;
+        return;
+      }
+      const result = await db.from('profiles').select('invisible_mode').eq('id', uid).maybeSingle();
+      if (!privacyCurrent()) return;
+      check(result.error);
+      if (!result.data) {
+        privacyState.textContent = 'Enregistrez votre profil avant d’activer le mode invisible.';
+        privacyButton.textContent = 'Mode invisible';
+        return;
+      }
+      privacyEnabled = result.data.invisible_mode === true;
+      privacyReady = true;
+      privacyButton.textContent = privacyEnabled ? 'Désactiver le mode invisible' : 'Activer le mode invisible';
+      privacyButton.setAttribute('aria-pressed', String(privacyEnabled));
+      privacyState.textContent = privacyEnabled
+        ? 'Activé — votre profil est masqué dans les recherches.'
+        : 'Désactivé — votre visibilité classique s’applique.';
+    } catch {
+      if (!privacyCurrent()) return;
+      privacyState.textContent = 'Statut indisponible. Réessayez pour vérifier votre réglage.';
+      privacyButton.textContent = 'Mode invisible';
+      privacyRetry.hidden = false;
+    } finally {
+      if (privacyCurrent()) privacyButton.disabled = privacyBusy || !privacyReady;
+    }
+  }
+  privacyRetry.onclick = () => { if (!privacyBusy) void refreshPrivacy(); };
+  privacyButton.onclick = async () => {
+    if (!privacyCurrent() || privacyBusy || !privacyReady) return;
+    privacyBusy = true;
+    privacyButton.disabled = true;
+    privacyState.textContent = 'Enregistrement…';
+    let failed = false;
+    try {
+      const result = await db.rpc('set_invisible_mode', { enabled: !privacyEnabled });
+      if (!privacyCurrent()) return;
+      check(result.error);
+      if (typeof result.data !== 'boolean') throw Error('Réponse inattendue');
+    } catch {
+      failed = true;
+    } finally {
+      if (privacyCurrent()) {
+        privacyBusy = false;
+        await refreshPrivacy();
+        if (failed && privacyCurrent()) status('Modification non confirmée. Vérifiez le statut du mode invisible ou réessayez.');
+      }
+    }
+  };
+  privacy.append(privacyState, privacyButton, privacyUpgrade, privacyRetry,
+    element('small', 'Le masquage VIP prend fin lorsque votre abonnement VIP expire.'));
+
   const save = element('button', 'Enregistrer mon profil');
   form.append(save);
-  view.append(form, locationForm(uid, rev));
+  view.append(form, privacy, locationForm(uid, rev));
+  void refreshPrivacy();
 
   form.onsubmit = e => {
     e.preventDefault();
@@ -261,6 +349,7 @@ async function profile() {
 
         check(error);
         status('Profil enregistré.');
+        if (privacyCurrent() && !privacyBusy) void refreshPrivacy();
 
       } finally {
         save.disabled = false;
