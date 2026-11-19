@@ -1220,7 +1220,19 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden){void hear
 db.auth.onAuthStateChange(()=>{setTimeout(()=>{void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});},0);});
 
 // V15 — galleries and detailed profiles
+async function renderVipBadge(card,target,uid,rev){
+  try {
+    const r=await db.rpc('get_vip_badges',{p_user_ids:[target]});
+    if(r.error || !r.data?.some(x=>x.profile_id===target && x.is_vip===true) || user?.id!==uid || revision!==rev || !card.isConnected)return;
+    const heading=card.querySelector('h2,h3');
+    if(!heading || heading.querySelector('.wc-vip-badge'))return;
+    const b=element('span','★ SHÉRIF VIP');b.className='wc-vip-badge';
+    b.style.cssText='display:inline-block;margin:4px 0 4px 8px;padding:4px 9px;border:1px solid #eac16d;border-radius:999px;background:#78501e;color:#ffe1a0;font-size:12px;font-weight:700;vertical-align:middle;white-space:nowrap;';
+    heading.append(b);
+  } catch(e) { console.warn('Badge VIP indisponible',e); }
+}
 async function renderBadge(card,target,uid,rev){
+  void renderVipBadge(card,target,uid,rev);
   try { const r=await db.rpc('is_profile_verified',{other_user:target});
     if(!r.error && r.data && user?.id===uid && revision===rev && card.isConnected){const b=element('span',' ✓ Vérifié par la modération');b.className='wc-verified';card.querySelector('h2')?.append(b);}
   } catch {}
@@ -1291,5 +1303,5 @@ async function receivedLikes(){
   if(!r.data.length){view.append(element('p','Aucun like reçu disponible.'));return;}
   const profiles=await db.rpc('discover_members'); if(!current())return; check(profiles.error);
   const members=new Map((profiles.data||[]).map(p=>[p.id,p]));
-  for(const like of r.data){const p=members.get(like.profile_id); if(!p)continue; const card=element('article'); card.append(element('h3',p.pseudo||'Membre'),element('small',new Date(like.liked_at).toLocaleString('fr-FR')),actionButton('Voir le profil',()=>detailedProfile(like.profile_id,p.pseudo,receivedLikes)));view.append(card);}
+  for(const like of r.data){const p=members.get(like.profile_id); if(!p)continue; const card=element('article'); card.append(element('h3',p.pseudo||'Membre'),element('small',new Date(like.liked_at).toLocaleString('fr-FR')),actionButton('Voir le profil',()=>detailedProfile(like.profile_id,p.pseudo,receivedLikes)));view.append(card);void renderVipBadge(card,like.profile_id,uid,rev);}
 }
