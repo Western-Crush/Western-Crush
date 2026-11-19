@@ -16,6 +16,16 @@ function check(e) {
   if (e) throw e;
 }
 
+async function uploadValidatedPhoto(bucket, file) {
+  const {data,error}=await db.auth.getSession();
+  check(error);
+  if(!data.session) throw Error('Connexion requise');
+  const response=await fetch('https://krfphvzbgjkhvwwkmuol.supabase.co/functions/v1/validate-photo?bucket='+encodeURIComponent(bucket),{method:'POST',headers:{Authorization:'Bearer '+data.session.access_token,'Content-Type':file.type},body:file});
+  const result=await response.json();
+  if(!response.ok||!result.valid||typeof result.path!=='string') throw Error(result.error||'Photo refusée');
+  return result.path;
+}
+
 async function act(fn) {
   try {
     await fn();
@@ -415,13 +425,7 @@ async function profile() {
         'image/webp': 'webp'
       }[f.type];
 
-      const next = uid + '/' + crypto.randomUUID() + '.' + ext;
-
-      const { error } = await bucket.upload(next, f, {
-        contentType: f.type
-      });
-
-      check(error);
+      const next = await uploadValidatedPhoto('profile-photos', f);
 
       const result = await db
         .from('profiles')
@@ -1411,8 +1415,7 @@ async function renderGallery(panel,target,own,uid,rev){
       cell.append(element('small','Photo '+pos),input,actionButton('Ajouter',async()=>{
         if(!current())return;const f=input.files[0];const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[f?.type];
         if(!f||!ext||f.size>5242880)throw Error('Choisissez une image JPEG, PNG ou WebP de 5 Mo maximum.');
-        const path=uid+'/'+crypto.randomUUID()+'.'+ext;
-        check((await storage.upload(path,f,{contentType:f.type,upsert:false})).error);
+        const path=await uploadValidatedPhoto('profile-gallery',f);
         const result=await db.from('profile_photos').insert({user_id:uid,photo_url:path,position:pos});
         if(result.error){await storage.remove([path]);check(result.error);}
         if(current())await renderGallery(panel,target,own,uid,rev);
