@@ -1346,9 +1346,15 @@ async function renderGallery(panel,target,own,uid,rev){
       const signed=await storage.createSignedUrl(row.photo_url,60);if(!current())return;
       if(!signed.error){pic.src=signed.data.signedUrl;const zoom=element('button');zoom.type='button';zoom.className='wc-photo-zoom';zoom.setAttribute('aria-label','Agrandir la photo '+pos);zoom.append(pic);zoom.onclick=()=>{if(current())openGalleryZoom(pic);};cell.append(zoom);}else cell.append(element('p','Photo indisponible'));
       if(own)cell.append(actionButton('Supprimer',async()=>{
-        if(!current()||!confirm('Supprimer cette photo ?'))return;
-        const feedback=element('p','Suppression en cours…'); feedback.setAttribute('role','status');cell.append(feedback);
+        const feedback=element('p','Vérification de la session…'); feedback.setAttribute('role','status');cell.append(feedback);
+        status('Suppression de la photo : vérification…');
         try {
+          if(!panel.isConnected || !own || target!==uid || user?.id!==uid)throw Error('Session ou galerie inactive. Ouvrez de nouveau votre profil.');
+          if(!confirm('Supprimer cette photo ?')){feedback.textContent='Suppression annulée.';status('Suppression annulée.');return;}
+          const session=await db.auth.getSession();
+          if(session.error)throw Error('Session : '+session.error.message);
+          if(session.data.session?.user.id!==uid || user?.id!==uid || !panel.isConnected)throw Error('Session expirée ou profil fermé. Reconnectez-vous.');
+          feedback.textContent='Suppression du fichier…';
           const removed=await storage.remove([row.photo_url]);
           if(removed.error)throw Error('Stockage : '+removed.error.message);
           if(!removed.data?.length){
@@ -1361,10 +1367,10 @@ async function renderGallery(panel,target,own,uid,rev){
           const deleted=await db.from('profile_photos').delete().eq('id',row.id).eq('user_id',uid).select('id');
           if(deleted.error)throw Error('Base de données : '+deleted.error.message);
           if(!deleted.data?.some(x=>x.id===row.id))throw Error('La base de données n’a supprimé aucun enregistrement.');
-          if(current()){
-            await renderGallery(panel,target,own,uid,rev);
+          status('Photo supprimée avec succès.');
+          if(panel.isConnected && user?.id===uid){
+            await renderGallery(panel,target,own,uid,revision);
             const done=element('p','Photo supprimée avec succès.');done.setAttribute('role','status');panel.prepend(done);
-            status('Photo supprimée avec succès.');
           }
         }catch(e){
           feedback.textContent=e.message||'Échec de la suppression.';
