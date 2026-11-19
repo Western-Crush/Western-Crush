@@ -734,6 +734,11 @@ async function discover() {
   }
   const filters = element('details'); filters.className = 'wc-filters'; filters.open = false; filters.append(element('summary','🔎 Filtres de recherche'), searchForm());
   view.replaceChildren(element('h2', '🤠 Découvrir les membres'), filters);
+  const quota = element('p','Chargement des likes…');
+  view.prepend(quota);
+  async function refreshQuota(){ const r=await db.rpc('my_remaining_likes'); if(user?.id===uid && revision===rev) quota.textContent=r.error?'Compteur indisponible':r.data===-1?'★ Likes illimités Premium':`${r.data} / 10 likes restants aujourd’hui`; }
+  void refreshQuota();
+  view.append(actionButton('♥ Qui m’aime ?', receivedLikes));
   const refresh = element('button', 'Actualiser les profils');
   refresh.onclick = () => act(discover);
   const settings = element('button', 'Modifier ma visibilité');
@@ -777,6 +782,7 @@ async function discover() {
       const result = ownLikes.has(target)
         ? await db.from('likes').delete().eq('sender_id', uid).eq('receiver_id', target)
         : await db.from('likes').insert({sender_id: uid, receiver_id: target});
+      void refreshQuota();
       check(result.error);
       const m = await db.rpc('get_matches'); check(m.error);
       if (user?.id !== uid || rev !== revision) return;
@@ -1095,9 +1101,9 @@ async function refreshNotificationCount() {
   if (!uid || notificationBusy) return;
   notificationBusy = true;
   try {
-    const r = await db.from('notifications').select('id', {count:'exact',head:true}).eq('user_id',uid).eq('is_read',false);
+    const r = await db.rpc('get_my_notifications');
     if (user?.id !== uid) return;
-    notificationButton.textContent = r.error ? '🔔 Notifications' : `🔔 Notifications${r.count ? ' ('+r.count+')' : ''}`;
+    notificationButton.textContent = r.error ? '🔔 Notifications' : `🔔 Notifications${r.data?.some(n=>!n.is_read) ? ' ('+r.data.filter(n=>!n.is_read).length+')' : ''}`;
   } catch { /* Nouvelle tentative au prochain rafraîchissement. */ }
   finally { notificationBusy = false; }
 }
@@ -1106,24 +1112,25 @@ async function notifications() {
   if (!uid) return;
   const current = () => user?.id === uid && revision === rev;
   view.textContent = 'Chargement des notifications…';
-  const r = await db.from('notifications').select('id,type,is_read,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(100);
+  const r = await db.rpc('get_my_notifications');
   if (!current()) return;
   if (r.error) { view.textContent = 'Notifications indisponibles.'; check(r.error); }
   view.replaceChildren(element('h2','🔔 Mes notifications'),actionButton('Actualiser',notifications),actionButton('Tout marquer comme lu',async()=>{
     if (!current()) return;
-    check((await db.from('notifications').update({is_read:true}).eq('user_id',uid).eq('is_read',false)).error);
+    check((await db.rpc('mark_notifications_read',{p_id:null})).error);
     await refreshNotificationCount(); if(current()) await notifications();
   }));
   const labels = {like:'❤️ Un membre apprécie votre profil.',match:'💘 Vous avez un nouveau match !',message:'💬 Vous avez reçu un message.'};
   if (!r.data.length) view.append(element('p','Aucune notification pour le moment.'));
-  for (const n of r.data) {
+  for (const n of r.data.slice(0,100)) {
     const card = element('article');
     card.append(element('h3',(n.is_read?'':'● ')+(labels[n.type] || 'Nouvelle notification')),element('small',new Date(n.created_at).toLocaleString('fr-FR')));
     if (!n.is_read) card.append(actionButton('Marquer comme lue',async()=>{
       if (!current()) return;
-      check((await db.from('notifications').update({is_read:true}).eq('user_id',uid).eq('id',n.id)).error);
+      check((await db.rpc('mark_notifications_read',{p_id:n.id})).error);
       await refreshNotificationCount(); if(current()) await notifications();
     }));
+    if(n.type==='like') card.append(actionButton(n.actor_id?'Voir mes likes reçus':'Découvrir avec Premium',n.actor_id?receivedLikes:premium));
     if(n.type==='match'||n.type==='message') card.append(actionButton('Ouvrir mes matchs',matches));
     view.append(card);
   }
@@ -1271,4 +1278,18 @@ async function detailedProfile(target,name,back){
   if(!me.error&&complete(me.data)&&complete(x)&&!c.error&&c.data!==null){card.append(element('h3',c.data+' % de compatibilité'),element('small','Score indicatif fondé sur les préférences déclarées.'));const bar=element('progress');bar.max=100;bar.value=c.data;card.append(bar);}else card.append(element('p','Compatibilité non calculée : préférences incomplètes ou score indisponible.'));
   view.append(card);void memberPhoto(card,target,uid,rev);void renderBadge(card,target,uid,rev);
   if(!m.error&&m.data.some(x=>x.match_id===target)){const panel=element('article');view.append(panel);await renderGallery(panel,target,false,uid,rev);}else view.append(element('p','Galerie supplémentaire réservée aux matchs.'));
+}
+
+// V16 — likes reçus
+async function receivedLikes(){
+  const uid=user?.id, rev=++revision, view=$('view'); if(!uid)return;
+  const current=()=>user?.id===uid && revision===rev;
+  view.replaceChildren(element('h2','♥ Qui m’aime ?'),actionButton('Retour',discover));
+  const plan=await db.rpc('my_membership_plan'); if(!current())return; check(plan.error);
+  if(!['cowboy','vip'].includes(plan.data)){view.append(element('p','Découvrez les personnes qui aiment votre profil avec Cowboy ou Shérif VIP.'),actionButton('Voir les abonnements',premium));return;}
+  const r=await db.rpc('get_received_likes'); if(!current())return; check(r.error);
+  if(!r.data.length){view.append(element('p','Aucun like reçu disponible.'));return;}
+  const profiles=await db.rpc('discover_members'); if(!current())return; check(profiles.error);
+  const members=new Map((profiles.data||[]).map(p=>[p.id,p]));
+  for(const like of r.data){const p=members.get(like.profile_id); if(!p)continue; const card=element('article'); card.append(element('h3',p.pseudo||'Membre'),element('small',new Date(like.liked_at).toLocaleString('fr-FR')),actionButton('Voir le profil',()=>detailedProfile(like.profile_id,p.pseudo,receivedLikes)));view.append(card);}
 }
