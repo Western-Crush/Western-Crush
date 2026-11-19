@@ -1347,9 +1347,29 @@ async function renderGallery(panel,target,own,uid,rev){
       if(!signed.error){pic.src=signed.data.signedUrl;const zoom=element('button');zoom.type='button';zoom.className='wc-photo-zoom';zoom.setAttribute('aria-label','Agrandir la photo '+pos);zoom.append(pic);zoom.onclick=()=>{if(current())openGalleryZoom(pic);};cell.append(zoom);}else cell.append(element('p','Photo indisponible'));
       if(own)cell.append(actionButton('Supprimer',async()=>{
         if(!current()||!confirm('Supprimer cette photo ?'))return;
-        check((await storage.remove([row.photo_url])).error);
-        check((await db.from('profile_photos').delete().eq('id',row.id).eq('user_id',uid)).error);
-        if(current())await renderGallery(panel,target,own,uid,rev);
+        const feedback=element('p','Suppression en cours…'); feedback.setAttribute('role','status');cell.append(feedback);
+        try {
+          const removed=await storage.remove([row.photo_url]);
+          if(removed.error)throw Error('Stockage : '+removed.error.message);
+          if(!removed.data?.length){
+            const parts=row.photo_url.split('/');
+            const filename=parts.pop();
+            const listing=await storage.list(parts.join('/'),{search:filename});
+            if(listing.error)throw Error('Vérification du stockage : '+listing.error.message);
+            if(listing.data?.some(x=>x.name===filename))throw Error('Le stockage n’a pas supprimé le fichier.');
+          }
+          const deleted=await db.from('profile_photos').delete().eq('id',row.id).eq('user_id',uid).select('id');
+          if(deleted.error)throw Error('Base de données : '+deleted.error.message);
+          if(!deleted.data?.some(x=>x.id===row.id))throw Error('La base de données n’a supprimé aucun enregistrement.');
+          if(current()){
+            await renderGallery(panel,target,own,uid,rev);
+            const done=element('p','Photo supprimée avec succès.');done.setAttribute('role','status');panel.prepend(done);
+            status('Photo supprimée avec succès.');
+          }
+        }catch(e){
+          feedback.textContent=e.message||'Échec de la suppression.';
+          throw e;
+        }
       }));
     }else{
       const input=element('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';input.setAttribute('aria-label','Photo '+pos);
