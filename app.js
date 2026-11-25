@@ -1591,6 +1591,18 @@ async function adminPrivacyRequests(){
  }catch(e){if(current())output.textContent=t('Contrôle impossible. Suppression verrouillée.','Check failed. Deletion locked.');throw e;}
  }),output);
  }
+ if(r.kind==='erasure'&&r.status==='reviewing'&&r.user_id!==uid){
+ const planOutput=element('div');planOutput.setAttribute('role','status');
+ card.append(actionButton(t('Préparer la clôture Stripe','Prepare Stripe closure'),async()=>{
+ if(!current())return;await requireAdmin(uid);if(!current())return;
+ planOutput.textContent=t('Inventaire en cours…','Preparing inventory…');
+ try{
+ const res=await db.functions.invoke('erasure-closure-plan',{body:{request_id:r.id}});check(res.error);if(!current())return;
+ const d=res.data;if(d?.deletion_allowed!==false||d?.closure_executed!==false)throw Error('Invalid closure plan');
+ planOutput.replaceChildren(element('p',t('Abonnements à clôturer : ','Subscriptions to close: ')+d.subscriptions_to_close),element('p',t('Sessions de paiement ouvertes : ','Open checkouts: ')+d.open_checkouts),element('p',t('Fichiers photo principaux : ','Main photo files: ')+d.storage_inventory['profile-photos']),element('p',t('Fichiers galerie : ','Gallery files: ')+d.storage_inventory['profile-gallery']),element('p',t('Inventaire uniquement. Aucune résiliation ni suppression effectuée.','Inventory only. No cancellation or deletion performed.')));
+ }catch(e){if(current())planOutput.textContent=t('Préparation impossible : contrôle manuel nécessaire.','Planning failed: manual review required.');throw e;}
+ }),planOutput);
+ }
  const change=(label,next)=>actionButton(label,async()=>{if(!current())return;if(!await adminConfirmation(label+' ?'))return;await requireAdmin(uid);if(!current())return;check((await db.rpc('review_privacy_request',{p_request:r.id,p_status:next})).error);if(current())await adminPrivacyRequests();});
  if(r.user_id!==uid){if(r.status==='pending')card.append(change(t('Commencer le traitement','Start review'),'reviewing'));if(r.status==='reviewing'){if(r.kind!=='erasure')card.append(change(t('Confirmer le traitement effectué','Confirm completed processing'),'completed'));card.append(change(t('Refuser après examen','Reject after review'),'rejected'));}}
  view.append(card);
