@@ -50,6 +50,30 @@ async function act(fn) {
 
 // V18.5: interface safeguards; Supabase Auth remains the authority.
 const authTr=(fr,en)=>wcLang==='en'?en:fr;
+// Public Turnstile site key only. Empty until a real widget is configured.
+// The secret key must be configured exclusively in Supabase Auth.
+const WC_TURNSTILE_SITE_KEY='';
+let wcCaptchaToken='',wcCaptchaWidget=null;
+function initAuthCaptcha(){
+ if(!WC_TURNSTILE_SITE_KEY)return;
+ const holder=element('div');holder.id='wc-auth-captcha';
+ $('login').before(holder);
+ const info=element('p',authTr('Vérification anti-robot requise.','Bot verification required.'));holder.before(info);
+ const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;
+ script.onload=()=>{
+ try{wcCaptchaWidget=window.turnstile.render(holder,{sitekey:WC_TURNSTILE_SITE_KEY,language:wcLang==='en'?'en':'fr',callback:token=>{wcCaptchaToken=token;info.textContent=authTr('Vérification effectuée.','Verification complete.');},'expired-callback':()=>{wcCaptchaToken='';info.textContent=authTr('Vérification expirée.','Verification expired.');},'error-callback':()=>{wcCaptchaToken='';info.textContent=authTr('Vérification indisponible.','Verification unavailable.');}});}catch{info.textContent=authTr('Vérification indisponible.','Verification unavailable.');}
+ };
+ script.onerror=()=>{info.textContent=authTr('Vérification indisponible.','Verification unavailable.');};document.head.append(script);
+}
+function captchaOptions(){
+ if(!WC_TURNSTILE_SITE_KEY)return {};
+ if(!wcCaptchaToken)throw Error(authTr('Termine la vérification anti-robot.','Complete the bot verification.'));
+ return {captchaToken:wcCaptchaToken};
+}
+function resetAuthCaptcha(){
+ wcCaptchaToken='';
+ if(wcCaptchaWidget!==null){try{window.turnstile.reset(wcCaptchaWidget);}catch{}}
+}
 let authBusy=false;
 let authTimes={login:0,register:0,recovery:0};
 let failedLogins=0;
@@ -67,7 +91,7 @@ async function guardedAuth(kind,fn){
  authBusy=true;
  const buttons=[$('login'),$('register'),forgot];
  for(const b of buttons)b.disabled=true;
- try{await fn();}finally{authBusy=false;for(const b of buttons)b.disabled=false;}
+ try{await fn();}finally{resetAuthCaptcha();authBusy=false;for(const b of buttons)b.disabled=false;}
 }
 function validAuthEmail(){
  const e=$('email');if(!e.value.trim()||!e.validity.valid)throw Error(tr('Saisissez votre adresse email.'));
@@ -84,8 +108,8 @@ $('register').onclick = () => act(async () => {
  const email=validAuthEmail(),password=$('password').value;
  if(password.length<12)throw Error(tr('Email valide et 12 caractères minimum requis.'));
  await guardedAuth('register',async()=>{
- authDelay('register',60000);
- const {error}=await db.auth.signUp({email,password,options:{emailRedirectTo:site,data:{adult_declared:true}}});
+ const captcha=captchaOptions();authDelay('register',60000);
+ const {error}=await db.auth.signUp({email,password,options:{emailRedirectTo:site,data:{adult_declared:true},...captcha}});
  $('password').value='';
  if(error)throw Error(authErrorMessage(error));
  status(tr('Vérifiez votre boîte mail.'));
@@ -95,8 +119,8 @@ $('login').onclick=()=>act(async()=>{
  const email=validAuthEmail(),password=$('password').value;
  if(!password)throw Error(authTr('Saisis ton mot de passe.','Enter your password.'));
  await guardedAuth('login',async()=>{
- authDelay('login',2000);
- const {error}=await db.auth.signInWithPassword({email,password});
+ const captcha=captchaOptions();authDelay('login',2000);
+ const {error}=await db.auth.signInWithPassword({email,password,options:captcha});
  $('password').value='';
  if(error){
  failedLogins++;
@@ -113,12 +137,13 @@ $('login').after(forgot);
 forgot.onclick=()=>act(async()=>{
  const email=validAuthEmail();
  await guardedAuth('recovery',async()=>{
- authDelay('recovery',60000);
- const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:site});
+ const captcha=captchaOptions();authDelay('recovery',60000);
+ const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:site,...captcha});
  if(error?.status===429||error?.status>=500)throw Error(authErrorMessage(error));
  status(tr('Si votre compte existe, vous recevrez un lien de réinitialisation.'));
  });
 });
+initAuthCaptcha();
 function showRecovery(){
  const auth=$('auth'), app=$('app');
  auth.hidden=true;app.hidden=true;
