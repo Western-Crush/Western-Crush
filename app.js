@@ -298,7 +298,7 @@ async function profile() {
 
   const { data, error } = await db
     .from('profiles')
-    .select('pseudo,bio,age,city,department,gender,looking_for,interests,western_style,relationship_goal,photo_url,discoverable,country_code,preferred_language,distance_unit')
+    .select('pseudo,bio,age,city,department,gender,interests,western_style,relationship_goal,photo_url,discoverable,country_code,preferred_language,distance_unit')
     .eq('id', uid)
     .maybeSingle();
 
@@ -347,7 +347,6 @@ async function profile() {
     ['city', tr('Ville'), 100],
     ['department', tr('Département / État (State)'), 100],
     ['gender', tr('Genre'), 80],
-    ['looking_for', tr('Personne recherchée'), 100],
     ['interests', tr('Centres d’intérêt (séparés par des virgules)'), 500],
     ['western_style', tr('Style Country et Western'), 100],
     ['relationship_goal', tr('Relation recherchée'), 100],
@@ -378,7 +377,6 @@ async function profile() {
 
     if (key === 'pseudo') f.required = true;
 
-    if(key==='looking_for'){f.readOnly=true;f.placeholder=wcLang==='en'?'Unavailable during beta':'Indisponible pendant la bêta';}
     fields[key] = f;
     l.append(f);
     form.append(l);
