@@ -337,6 +337,7 @@ async function profile() {
     f.value=(key==='preferred_language'?wcLang:key==='distance_unit'?wcUnit:data?.[key]) || fallback;if(key==='country_code')f.id='wc-profile-country'; fields[key]=f; l.append(f); form.append(l);
   }
   form.append(element('small',wcLang==='en'?'US city lookup is available for 42 pilot locations below.':'La recherche américaine est disponible pour 42 villes pilotes ci-dessous.'));
+  form.append(element('p',wcLang==='en'?'Use only your own identity and photos you are entitled to share. Email confirmation does not verify your identity or age.':'Utilisez uniquement votre propre identité et des photos que vous êtes autorisé à publier. La confirmation de l’e-mail ne vérifie ni votre identité ni votre âge.'));
   for (const [key, label, max] of [
     ['pseudo', tr('Pseudo'), 60],
     ['age', tr('Âge (18 ans minimum)'), 3],
@@ -1099,12 +1100,13 @@ async function reportMember(target, name, back) {
   const select = element('select'); select.required = true;
   select.style.cssText = 'display:block;width:100%;padding:11px;border-radius:9px;margin:8px 0;font:inherit';
   const placeholder = element('option', tr('Choisir un motif')); placeholder.value = ''; select.append(placeholder);
-  for (const reason of ['Faux profil','Harcèlement ou insultes','Suspicion de compte mineur','Arnaque ou escroquerie','Comportement inapproprié','Autre raison']) {
-    const option = element('option', reason); option.value = reason; select.append(option);
+  for (const [reason,en] of [['Faux profil','Fake profile'],['Usurpation d’identité','Impersonation'],['Photo utilisée sans consentement','Photo used without consent'],['Harcèlement ou insultes','Harassment or insults'],['Suspicion de compte mineur','Suspected underage account'],['Arnaque ou escroquerie','Scam or fraud'],['Comportement inapproprié','Inappropriate conduct'],['Autre raison','Other reason']]) {
+    const option = element('option', wcLang==='en'?en:reason); option.value = reason; select.append(option);
   }
   label.append(select); form.append(label);
   const detailsLabel = element('label', tr('Informations complémentaires (facultatif)'));
-  const details = element('textarea'); details.maxLength = 1000; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
+  const details = element('textarea'); details.maxLength = 900; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
+  form.append(element('small',wcLang==='en'?'Describe the issue without sharing identity documents, private contact details or intimate images. If you cannot access your account, contact elorium.digital@gmail.com.':'Décrivez le problème sans transmettre de pièce d’identité, de coordonnées privées ou d’image intime. Si vous ne pouvez pas accéder à votre compte, contactez elorium.digital@gmail.com.'));
   const send = element('button', tr('Envoyer le signalement')); send.type = 'submit'; form.append(send);
   form.onsubmit = e => { e.preventDefault(); act(async () => {
     if (user?.id !== uid || rev !== revision || !select.value || send.disabled) return;
@@ -1377,8 +1379,11 @@ async function administration() {
     }
     view.append(element('h2',tr('Signalements')));
     if (!reports.length) view.append(element('p',tr('Aucun signalement.')));
-    for (const x of reports) {
-      const card = element('article'); card.append(element('p','Membre signalé : '+name(x.reported_id)),element('p','Auteur : '+name(x.reporter_id)),element('p',x.reason),element('p',x.reviewed?tr('Traité'):tr('À traiter')));
+    const priorityReport = x => /^(Suspicion de compte mineur|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
+    const orderedReports = [...reports].sort((a,b) => Number(Boolean(a.reviewed))-Number(Boolean(b.reviewed)) || Number(priorityReport(b))-Number(priorityReport(a)));
+    for (const x of orderedReports) {
+      const card = element('article');
+      if (!x.reviewed && priorityReport(x)) card.append(element('strong',wcLang==='en'?'Priority review — allegation not confirmed':'Examen prioritaire — signalement non confirmé')); card.append(element('p','Membre signalé : '+name(x.reported_id)),element('p','Auteur : '+name(x.reporter_id)),element('p',x.reason),element('p',x.reviewed?tr('Traité'):tr('À traiter')));
       if (!x.reviewed) card.append(actionButton(tr('Marquer comme traité'),async () => {
         if (!current()) return; await requireAdmin(uid); if (!current()) return;
         const r = await db.from('reports').update({reviewed:true}).eq('id',x.id).select('id'); check(r.error); if (!r.data.length) throw Error(tr('Signalement non modifié.'));
