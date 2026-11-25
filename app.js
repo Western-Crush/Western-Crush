@@ -1422,7 +1422,7 @@ function appealState(state){
 async function mySuspensionAppeals(){
  const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
  if(!uid)return;
- view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')),actionButton(appealLabel('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(appealLabel('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
+ view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')),actionButton(appealLabel('Mes tickets d’assistance','My support tickets'),()=>wcSupportList(false)),actionButton(appealLabel('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(appealLabel('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
  const r=await db.rpc('wc_my_appeals');
  if(!current())return;
  if(r.error){
@@ -1615,7 +1615,7 @@ async function administration() {
     const name = id => names.get(id) || id;
     const suspended = new Map(suspensions.map(x => [x.user_id,x]));
     const active = new Set(subscriptions.filter(x => getActiveSubscription([x])).map(x => x.user_id));
-    view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
+    view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration),actionButton(wcLang==='en'?'Support tickets':'Tickets d’assistance',()=>wcSupportList(true)));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
     view.append(stats,actionButton(wcLang==='en'?'🤠 Sheriff — AI assistant':'🤠 Shérif — Assistant IA',adminSheriffAssistant),actionButton(appealLabel('Journal des incidents','Incident journal'),adminIncidentJournal),actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Data retention':'Conservation des données',adminRetentionReview),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
@@ -2299,3 +2299,71 @@ async function contractTestView(kind){
 for(const [id,kind] of [['wc-test-cancel','cancel'],['wc-test-withdraw','withdraw']]){
  const button=$(id);if(button)button.onclick=()=>act(()=>contractTestView(kind));
 }
+
+
+// V18.16 — support tickets; no direct table access, no files, no external notification.
+const wcSupportText=(fr,en)=>wcLang==='en'?en:fr;
+const wcSupportCategories=()=>({account:wcSupportText('Compte','Account'),technical:wcSupportText('Technique','Technical'),safety:wcSupportText('Sécurité','Safety'),billing:wcSupportText('Abonnement test','Test subscription'),other:wcSupportText('Autre','Other')});
+const wcSupportStates=()=>({open:wcSupportText('À traiter','Open'),waiting_member:wcSupportText('En attente du membre','Waiting for member'),closed:wcSupportText('Clôturé','Closed')});
+const wcSupportDate=x=>new Date(x).toLocaleString(wcLocale());
+function wcSupportWarning(){
+ const t=wcSupportText,p=element('p',t('N’envoyez ni mot de passe, code MFA, données bancaires, pièce d’identité, photo privée ni contenu illicite. Aucun fichier joint. En cas de danger immédiat en France : 17 ou 112. Ce service n’est pas une permanence d’urgence. Pour les droits RGPD ou une rétractation, utilisez les démarches dédiées dans Confidentialité ou écrivez au support.','Do not send passwords, MFA codes, bank details, identity documents, private photos or illegal content. No attachments. In immediate danger in France: 17 or 112. Not an emergency helpdesk. For GDPR rights or withdrawal, use the dedicated Privacy flows or email support.'));
+ const a=element('a',t('Centre d’assistance et contact sans connexion','Help center and contact without signing in'));a.href='./support.html';p.append(document.createElement('br'),a);return p;
+}
+async function wcSupportList(admin=false,offset=0,filter=null){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev,t=wcSupportText;
+ if(!uid)return;
+ view.replaceChildren(element('h2',admin?t('Tickets d’assistance — administration','Support tickets — administration'):t('Mes tickets d’assistance','My support tickets')),wcSupportWarning());
+ if(admin){await requireAdmin(uid);if(!current())return;view.append(actionButton(t('Retour administration','Back to admin'),administration));}
+ else{
+  const form=element('form'),cat=element('select'),catLabel=element('label',t('Catégorie','Category'));
+  for(const [k,v] of Object.entries(wcSupportCategories()))cat.append(new Option(v,k));catLabel.append(cat);
+  const subject=element('input'),subLabel=element('label',t('Objet (5 à 120 caractères)','Subject (5–120 characters)'));subject.minLength=5;subject.maxLength=120;subject.required=true;subLabel.append(subject);
+  const body=element('textarea'),bodyLabel=element('label',t('Décrivez votre demande (10 à 2000 caractères)','Describe your request (10–2000 characters)'));body.minLength=10;body.maxLength=2000;body.required=true;body.rows=5;bodyLabel.append(body);
+  const send=element('button',t('Créer mon ticket','Create ticket'));send.type='submit';
+  const key=crypto.randomUUID();
+  form.append(catLabel,subLabel,bodyLabel,send);view.append(form);
+  form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+   if(!current()||send.disabled)return;
+   send.disabled=true;
+   try{const r=await db.rpc('wc_support_create',{p_category:cat.value,p_subject:subject.value.trim(),p_body:body.value.trim(),p_language:wcLang,p_key:key});check(r.error);if(!current())return;status(t('Ticket enregistré.','Ticket recorded.'));await wcSupportList(false);}
+   finally{send.disabled=false;}
+  });};
+ }
+ const stateFilter=element('select'),filterLabel=element('label',t('Filtrer par statut','Filter by status'));stateFilter.append(new Option(t('Tous','All'),''));for(const [k,v] of Object.entries(wcSupportStates()))stateFilter.append(new Option(v,k));stateFilter.value=filter||'';filterLabel.append(stateFilter);stateFilter.onchange=()=>act(()=>wcSupportList(admin,0,stateFilter.value||null));
+ view.append(filterLabel,actionButton(t('Actualiser','Refresh'),()=>wcSupportList(admin,offset,filter)));
+ const r=await db.rpc('wc_support_list',{p_admin:admin,p_limit:30,p_offset:offset,p_status:filter});check(r.error);if(admin)await requireAdmin(uid);if(!current())return;
+ const rows=Array.isArray(r.data)?r.data:[];if(!rows.length)view.append(element('p',t('Aucun ticket sur cette page.','No tickets on this page.')));
+ for(const item of rows){const card=element('article');card.append(element('h3',item.subject),element('p',wcSupportCategories()[item.category]+' · '+wcSupportStates()[item.status]),element('small',wcSupportDate(item.updated_at)+' · '+item.id),actionButton(t('Ouvrir le ticket','Open ticket'),()=>wcSupportThread(item,admin)));view.append(card);}
+ if(offset>0)view.append(actionButton(t('Page précédente','Previous page'),()=>wcSupportList(admin,Math.max(0,offset-30),filter)));
+ if(rows.length===30)view.append(actionButton(t('Page suivante','Next page'),()=>wcSupportList(admin,offset+30,filter)));
+}
+async function wcSupportThread(item,admin=false,offset=0){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev,t=wcSupportText;
+ if(!uid)return;
+ view.replaceChildren(element('h2',t('Ticket d’assistance','Support ticket')),actionButton(t('Retour aux tickets','Back to tickets'),()=>wcSupportList(admin)));
+ if(admin)await requireAdmin(uid);if(!current())return;
+ const r=await db.rpc('wc_support_thread',{p_ticket:item.id,p_admin:admin,p_limit:50,p_offset:offset});check(r.error);if(admin)await requireAdmin(uid);if(!current())return;
+ view.append(element('h3',item.subject),element('small',item.id),wcSupportWarning());
+ const rows=Array.isArray(r.data)?r.data:[];
+ for(const m of rows){const card=element('article'),body=element('p',m.body);body.style.whiteSpace='pre-wrap';body.style.overflowWrap='anywhere';card.append(element('strong',m.author_kind==='support'?t('Assistance Western Crush','Western Crush support'):t('Membre','Member')),element('small',wcSupportDate(m.created_at)),body);view.append(card);}
+ if(offset>0)view.append(actionButton(t('Messages précédents','Previous messages'),()=>wcSupportThread(item,admin,Math.max(0,offset-50))));
+ if(rows.length===50)view.append(actionButton(t('Messages suivants','Next messages'),()=>wcSupportThread(item,admin,offset+50)));
+ if(item.status==='closed'){view.append(element('p',t('Ticket clôturé. Créez une nouvelle demande si nécessaire.','Ticket closed. Create a new request if needed.')));return;}
+ const form=element('form'),label=element('label',t('Votre réponse (10 à 2000 caractères)','Your reply (10–2000 characters)')),body=element('textarea');body.minLength=10;body.maxLength=2000;body.required=true;body.rows=5;label.append(body);form.append(label);
+ const close=element('input');close.type='checkbox';
+ if(admin){const l=element('label',t('Clôturer le ticket avec cette réponse','Close ticket with this reply'));l.append(close);form.append(l);}
+ const send=element('button',t('Envoyer la réponse','Send reply'));send.type='submit';form.append(send);view.append(form);
+ const key=crypto.randomUUID();
+ form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+  if(!current()||send.disabled)return;send.disabled=true;
+  try{
+   if(admin)await requireAdmin(uid);if(!current())return;
+   if(admin&&close.checked&&!confirm(t('Clôturer définitivement ce ticket ?','Close this ticket?')))return;
+   const r=await db.rpc('wc_support_reply',{p_ticket:item.id,p_body:body.value.trim(),p_key:key,p_admin:admin,p_close:admin&&close.checked});check(r.error);if(!current())return;
+   status(t('Réponse enregistrée.','Reply recorded.'));await wcSupportList(admin);
+  }finally{send.disabled=false;}
+ });};
+}
+const wcSupportButton=$('wc-support-tickets');
+if(wcSupportButton){wcSupportButton.textContent=wcSupportText('Assistance','Support');wcSupportButton.onclick=()=>act(()=>wcSupportList(false));}
