@@ -1309,7 +1309,7 @@ async function conversation(target, name) {
   input.addEventListener('blur',stopTyping);
   const safetyHint=element('p');safetyHint.setAttribute('role','status');safetyHint.hidden=true;
   input.addEventListener('input',()=>{const signals=wcChatSafety(input.value);safetyHint.textContent=wcChatAdvice(signals);safetyHint.hidden=!signals.length;});
-  let busy = false, reading = false, last = null;
+  let busy = false, reading = false, last = null, wcAttemptRetry=null;
   let live = false, pending = false;
   const mode = () => live ? tr('● Messagerie en temps réel') : tr('Actualisation de secours toutes les 3 secondes');
   async function refresh() {
@@ -1351,9 +1351,20 @@ async function conversation(target, name) {
     const content = input.value.trim(); input.disabled = true;
     try {
       const signals=wcChatSafety(content);
-      if(wcChatAbuse(content).exact)throw Error(wcLang==='en'?'Message rejected by the abuse protection. Rephrase respectfully.':'Message refusé par la protection contre les abus. Reformulez avec respect.');
+      if(wcChatAbuse(content).exact){
+        if(!wcAttemptRetry||wcAttemptRetry.content!==content)wcAttemptRetry={content,key:crypto.randomUUID()};
+        const attempt=await db.rpc('wc_chat_record_attempt',{p_target:target,p_body:content,p_key:wcAttemptRetry.key});
+        check(attempt.error);
+        if(!current())return;
+        wcAttemptRetry=null;
+        const a=attempt.data||{};
+        const msg=a.state==='restricted'?(wcLang==='en'?'Messaging restricted until ':'Messagerie restreinte jusqu’au ')+new Date(a.until).toLocaleString(wcLocale()):a.state==='warning'||a.state==='warning_cooldown'?(wcLang==='en'?'Message blocked. Repeated direct insults can temporarily restrict messaging.':'Message bloqué. Les insultes directes répétées peuvent entraîner une restriction temporaire de messagerie.'):(wcLang==='en'?'Message blocked by the abuse protection.':'Message bloqué par la protection contre les abus.');
+        safetyHint.textContent=msg;safetyHint.hidden=false;status(msg);return;
+      }
+      wcAttemptRetry=null;
       if(signals.includes('link'))throw Error(wcLang==='en'?'External links are restricted in beta chat.':'Les liens externes sont limités dans la messagerie bêta.');
       const response=await db.from('messages').insert({sender_id:uid,receiver_id:target,content});
+      if(response.error?.code==='42501'&&String(response.error.message||'').includes('Messagerie temporairement restreinte')){const msg=wcLang==='en'?'Messaging temporarily restricted. See your restrictions and appeals.':'Messagerie temporairement restreinte. Consultez vos restrictions et recours.';safetyHint.textContent=msg;safetyHint.hidden=false;status(msg);return;}
       if(response.error?.code==='22023')throw Error(wcLang==='en'?'Message rejected by the beta safety policy.':'Message refusé par les protections de sécurité de la bêta.');
       check(response.error);
       if(current()){input.value='';safetyHint.hidden=true;safetyHint.textContent=''; stopTyping(); await refresh(); thread.scrollTop=thread.scrollHeight;}
@@ -1368,7 +1379,7 @@ async function conversation(target, name) {
     const r=await db.from('blocks').insert({blocker_id:uid,blocked_id:target});if(r.error?.code!=='23505')check(r.error);
     if(current()){stopTyping();thread.replaceChildren();status(wcLang==='en'?'Member blocked.':'Membre bloqué.');await matches();}
   });
-  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,safetyNotice,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))),blockButton);
+  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,safetyNotice,actionButton(wcLang==='en'?'My restrictions and appeals':'Mes restrictions et recours',()=>wcChatSanctionsView(false)),thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))),blockButton);
   const channel = db.channel('wc-chat-' + crypto.randomUUID());
   const onMessage = ({new: row}) => {
     if (!current() || !row) return;
@@ -1467,7 +1478,7 @@ function appealState(state){
 async function mySuspensionAppeals(){
  const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
  if(!uid)return;
- view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')),actionButton(appealLabel('Mes tickets d’assistance','My support tickets'),()=>wcSupportList(false)),actionButton(appealLabel('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(appealLabel('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
+ view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')),actionButton(appealLabel('Mes restrictions de messagerie','My messaging restrictions'),()=>wcChatSanctionsView(false)),actionButton(appealLabel('Mes tickets d’assistance','My support tickets'),()=>wcSupportList(false)),actionButton(appealLabel('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(appealLabel('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
  const r=await db.rpc('wc_my_appeals');
  if(!current())return;
  if(r.error){
@@ -2285,7 +2296,7 @@ async function adminSheriffAssistant(){
   if(value===null){unknown++;continue;}
   if(value>0){flagged++;recommendations.append(element('p',t(fr,english)+' : '+value+'. '+(key==='threats'?t('Examen humain prioritaire.','Prioritize human review.'):t('Vérifier manuellement.','Review manually.'))),actionButton(t('Examiner les signalements','Review reports'),()=>wcAdminReportQueue(key)));}
  }
- recommendations.append(element('p',t('Les signalements sont des allégations, pas des preuves. Le repère de 24 h est interne, non garanti. Les compteurs de retard peuvent recouper les catégories.','Reports are allegations, not proof. The 24h threshold is internal, not guaranteed. Age counters may overlap categories.')),actionButton(t('Tous les signalements ciblés','All targeted reports'),()=>wcAdminReportQueue('all')));
+ recommendations.append(element('p',t('Les signalements sont des allégations, pas des preuves. Le repère de 24 h est interne, non garanti. Les compteurs de retard peuvent recouper les catégories.','Reports are allegations, not proof. The 24h threshold is internal, not guaranteed. Age counters may overlap categories.')),actionButton(t('Tous les signalements ciblés','All targeted reports'),()=>wcAdminReportQueue('all')),actionButton(t('Sanctions et recours de messagerie','Messaging sanctions and appeals'),()=>wcChatSanctionsView(true)));
  const supportData=support.status==='fulfilled'&&!support.value.error?support.value.data:null;
  const supportFields=[
  ['open','Tickets à traiter','Open tickets','open',true],
@@ -2552,4 +2563,46 @@ async function wcAdminReportQueue(filter='all'){
   view.append(card);
  }
  view.append(actionButton(t('Administration complète','Full administration'),administration));
+}
+
+
+// V18.23 — progressive messaging restrictions and human review, separate from report allegations.
+async function wcChatSanctionsView(admin=false,offset=0){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev,t=(fr,en)=>wcLang==='en'?en:fr;
+ if(!uid)return;
+ if(admin)await requireAdmin(uid);
+ if(!current())return;
+ view.replaceChildren(element('h2',admin?t('Shérif — Restrictions et recours','Sheriff — Restrictions and appeals'):t('Mes restrictions de messagerie','My messaging restrictions')),actionButton(t('Actualiser','Refresh'),()=>wcChatSanctionsView(admin,offset)),actionButton(admin?t('Retour Shérif','Back to Sheriff'):t('Retour aux recours','Back to appeals'),admin?adminSheriffAssistant:mySuspensionAppeals),
+ element('p',t('Règle automatique de bêta : certaines insultes directes sont bloquées. Après plusieurs tentatives reconnues, une restriction temporaire peut être appliquée. Le compte, la consultation, l’assistance et les recours restent accessibles. Les signalements seuls ne déclenchent pas de sanction automatique.','Beta automated rule: certain direct insults are blocked. Repeated recognized attempts may trigger a temporary restriction. Account access, reading, support and appeals remain available. Reports alone do not trigger automatic sanctions.')));
+ const r=await db.rpc('wc_chat_sanctions_history',{p_admin:admin,p_offset:offset});check(r.error);
+ if(admin)await requireAdmin(uid);if(!current())return;
+ const rows=Array.isArray(r.data)?r.data:[];
+ const date=x=>x?new Date(x).toLocaleString(wcLocale()):'—';
+ if(!rows.length)view.append(element('p',t('Aucun événement enregistré.','No recorded event.')));
+ for(const x of rows){
+  const card=element('article'),duration=x.duration_minutes===1440?t('24 heures','24 hours'):x.duration_minutes===15?t('15 minutes','15 minutes'):t('Avertissement','Warning');
+  card.append(element('h3',duration),element('p',t('Motif : insulte directe reconnue par une règle automatique (version 1).','Reason: direct insult matched by an automated rule (version 1).')),element('small',t('Date : ','Date: ')+date(x.created_at)),element('p',t('Référence : ','Reference: ')+x.id));
+  if(admin)card.append(element('p',t('Membre : ','Member: ')+x.user_id));
+  if(x.duration_minutes>0)card.append(element('p',x.active?t('Restriction active jusqu’au ','Restriction active until ')+date(x.restriction_until):x.decision==='revoked'?t('Restriction annulée','Restriction revoked'):t('Restriction terminée le ','Restriction ended on ')+date(x.restriction_until)));
+  const decisions={pending:t('En attente d’examen','Pending review'),confirmed:t('Confirmé par un administrateur','Confirmed by an administrator'),revoked:t('Annulé par un administrateur','Revoked by an administrator')};
+  card.append(element('p',decisions[x.decision]||t('État inconnu','Unknown state')));
+  if(x.appealed_at)card.append(element('p',t('Recours reçu le ','Appeal received on ')+date(x.appealed_at)),element('p',x.appeal_text||''));
+  if(x.decision_at&&x.decision_reason)card.append(element('p',t('Motif de décision : ','Decision reason: ')+x.decision_reason),element('small',date(x.decision_at)));
+  if(!admin&&!x.appealed_at&&x.decision!=='revoked'){
+   const form=element('form'),label=element('label',t('Contester cet événement (10 à 1500 caractères)','Challenge this event (10–1500 characters)')),input=element('textarea');input.required=true;input.minLength=10;input.maxLength=1500;input.rows=4;label.append(input);
+   const send=element('button',t('Envoyer mon recours','Submit my appeal'));send.type='submit';form.append(label,send);card.append(form);
+   form.onsubmit=e=>{e.preventDefault();void act(async()=>{if(!current()||send.disabled)return;send.disabled=true;try{const a=await db.rpc('wc_chat_sanctions_appeal',{p_id:x.id,p_reason:input.value.trim()});check(a.error);if(a.data!==true)throw Error(t('Recours non enregistré.','Appeal not recorded.'));if(current())await wcChatSanctionsView(false,offset);}finally{send.disabled=false;}});};
+  }
+  if(admin&&x.user_id!==uid&&x.decision!=='revoked'){
+   card.append(element('p',t('Vérifiez le contexte et les éléments disponibles. En cas de doute, ne confirmez pas la sanction. Une confirmation humaine peut permettre une restriction plus longue en cas de nouvelles tentatives.','Check context and available evidence. If in doubt, do not confirm. Human confirmation can allow a longer restriction after new attempts.')));
+   for(const [decision,label] of [['confirmed',t('Confirmer après examen','Confirm after review')],['revoked',t('Annuler la mesure','Revoke measure')]]){
+    if(x.decision==='confirmed'&&decision==='confirmed')continue;
+    card.append(actionButton(label,async()=>{if(!current())return;const reason=await adminConfirmation(label+' — '+t('Motif obligatoire (10 caractères minimum)','Required reason (at least 10 characters)'),true);if(!reason)return;if(reason.trim().length<10)throw Error(t('Motif trop court.','Reason too short.'));await requireAdmin(uid);if(!current())return;const a=await db.rpc('wc_chat_sanctions_review',{p_id:x.id,p_decision:decision,p_reason:reason});check(a.error);if(a.data!==true)throw Error(t('Décision non enregistrée.','Decision not recorded.'));if(current())await wcChatSanctionsView(true,offset);}));
+   }
+  }
+  view.append(card);
+ }
+ if(offset>0)view.append(actionButton(t('Page précédente','Previous page'),()=>wcChatSanctionsView(admin,Math.max(0,offset-50))));
+ if(rows.length===50)view.append(actionButton(t('Page suivante','Next page'),()=>wcChatSanctionsView(admin,offset+50)));
+ view.append(element('p',t('En cas de problème d’accès : elorium.digital@gmail.com. Ne transmettez pas de mot de passe, code ou document sensible.','If access is unavailable: elorium.digital@gmail.com. Do not send passwords, codes or sensitive documents.')));
 }
