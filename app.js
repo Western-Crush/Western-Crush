@@ -1359,6 +1359,58 @@ async function mySuspensionAppeals(){
   view.append(card);
  }
 }
+async function adminIncidentJournal(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ const t=(fr,en)=>wcLang==='en'?en:fr;
+ const events={report_received:t('Signalement reçu','Report received'),photo_decision:t('Décision photo','Photo decision'),report_decision:t('Décision signalement','Report decision'),appeal_received:t('Recours reçu','Appeal received'),appeal_decision:t('Décision recours','Appeal decision'),account_suspended:t('Suspension ajoutée','Suspension added'),account_reactivated:t('Suspension retirée','Suspension removed'),account_suspension_changed:t('Suspension modifiée','Suspension changed'),profile_verified:t('Certification ajoutée','Verification added'),profile_verification_changed:t('Certification modifiée','Verification changed'),profile_verification_removed:t('Certification retirée','Verification removed'),privacy_decision:t('Décision RGPD','Privacy decision'),admin_role_added:t('Droit administrateur ajouté','Admin role added'),admin_role_removed:t('Droit administrateur retiré','Admin role removed'),admin_security_changed:t('Configuration sécurité administrateur modifiée','Admin security settings changed'),incident_declared:t('Incident déclaré manuellement','Incident manually declared')};
+ const categories={security:t('Sécurité','Security'),privacy:t('Données personnelles','Personal data'),illegal_content:t('Contenu potentiellement illégal','Potentially illegal content'),harassment:t('Harcèlement','Harassment'),fraud:t('Fraude','Fraud'),technical:t('Technique','Technical'),other:t('Autre','Other')};
+ const levels={low:t('Faible','Low'),medium:t('Modérée','Medium'),high:t('Élevée','High'),critical:t('Critique','Critical')};
+ const outcomes={...categories,approve:t('Approuvée','Approved'),reject:t('Refusée','Rejected'),withdraw:t('Retirée','Withdrawn'),unfounded:t('Non fondé','Unsubstantiated'),action_taken:t('Mesure effectuée','Action taken'),referred:t('Transmis','Referred'),accepted:t('Accepté','Accepted'),rejected:t('Rejeté','Rejected'),configured:t('Configurée','Configured'),recovery_hold:t('Récupération bloquée','Recovery hold'),removed:t('Retirée','Removed')};
+ let offset=0,loading=false;
+ view.replaceChildren(element('h2',t('Journal des incidents et interventions','Incident and intervention journal')),actionButton(t('Retour à l’administration','Back to administration'),administration));
+ await requireAdmin(uid);if(!current())return;
+ view.append(element('p',t('Historique en lecture seule, depuis l’installation. Les actions de la base sans utilisateur connecté sont identifiées comme opérations système. Aucun contenu de message, photo ou secret n’est enregistré ici.','Read-only history since installation. Database actions without a signed-in user are marked as system operations. No message content, photo or secret is recorded here.')));
+ const form=element('form');
+ const categoryLabel=element('label',t('Catégorie','Category')),category=element('select');
+ const severityLabel=element('label',t('Gravité','Severity')),severity=element('select');
+ for(const [k,v] of Object.entries(categories))category.append(new Option(v,k));
+ for(const [k,v] of Object.entries(levels))severity.append(new Option(v,k));
+ severity.value='medium';categoryLabel.append(category);severityLabel.append(severity);
+ const refLabel=element('label',t('Référence interne UUID (facultatif)','Internal UUID reference (optional)')),ref=element('input');ref.maxLength=36;refLabel.append(ref);
+ const send=element('button',t('Déclarer un incident','Declare incident'));send.type='submit';
+ form.append(categoryLabel,severityLabel,refLabel,send);view.append(form);
+ view.append(element('small',t('Déclarer un incident ne déclenche ni sanction, ni alerte automatique, ni transmission aux autorités.','Declaring an incident does not trigger sanctions, automatic alerts or reporting to authorities.')));
+ const panel=element('section');view.append(panel);
+ form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+  if(!current()||send.disabled)return;const subject=ref.value.trim();
+  if(subject&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subject))throw Error(t('Référence UUID invalide.','Invalid UUID reference.'));
+  send.disabled=true;try{
+   if(!await adminConfirmation(t('Enregistrer cet incident ?','Record this incident?')))return;
+   await requireAdmin(uid);if(!current())return;
+   const r=await db.rpc('wc_admin_declare_incident',{p_category:category.value,p_severity:severity.value,p_subject:subject||null});check(r.error);if(!r.data)throw Error(t('Incident non enregistré.','Incident not recorded.'));
+   ref.value='';offset=0;await load();status(t('Incident enregistré.','Incident recorded.'));
+  }finally{send.disabled=false;}
+ });};
+ async function load(){
+  if(!current()||loading)return;loading=true;panel.textContent=t('Chargement…','Loading…');
+  try{
+   await requireAdmin(uid);const r=await db.rpc('wc_admin_incident_journal',{p_limit:40,p_offset:offset});check(r.error);if(!current())return;
+   const rows=r.data||[];panel.replaceChildren(actionButton(t('Actualiser','Refresh'),load));
+   if(offset>0)panel.append(actionButton(t('Précédent','Previous'),async()=>{offset=Math.max(0,offset-40);await load();}));
+   if(rows.length===40)panel.append(actionButton(t('Suivant','Next'),async()=>{offset+=40;await load();}));
+   if(!rows.length)panel.append(element('p',t('Aucun événement sur cette page.','No events on this page.')));
+   for(const x of rows){
+    const card=element('article');card.append(element('h3',events[x.event_type]||x.event_type),element('small',new Date(x.recorded_at).toLocaleString(wcLocale())),element('p',t('Auteur : ','Actor: ')+(x.actor_id||t('Système / base de données','System / database'))));
+    if(x.subject_id)card.append(element('small',t('Référence : ','Reference: ')+x.subject_id));
+    if(x.outcome)card.append(element('p',t('Résultat / catégorie : ','Outcome / category: ')+(outcomes[x.outcome]||x.outcome)));
+    if(x.severity)card.append(element('p',t('Gravité : ','Severity: ')+(levels[x.severity]||x.severity)));
+    panel.append(card);
+   }
+  }catch(e){if(current())panel.textContent=e.message||t('Journal indisponible.','Journal unavailable.');throw e;}finally{loading=false;}
+ }
+ await load();
+}
+
 async function adminSuspensionAppeals(){
  const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
  let offset=0,loading=false;
@@ -1470,7 +1522,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(appealLabel('Journal des incidents','Incident journal'),adminIncidentJournal),actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
