@@ -52,8 +52,8 @@ function wcIdleLock(state){
 async function wcIdlePoll(touch=false){
  const state=wcIdleState;
  if(!state||recovering||user?.id!==state.uid)return false;
+ if(state.ready&&Date.now()>=state.deadline){wcIdleLock(state);return false;}
  if(state.pending)return state.pending;
- if(touch&&state.ready&&Date.now()>=state.deadline)touch=false;
  if(navigator.onLine===false){
   if(state.ready&&Date.now()>=state.deadline)wcIdleLock(state);
   return false;
