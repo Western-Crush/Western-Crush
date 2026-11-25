@@ -52,7 +52,7 @@ async function act(fn) {
 const authTr=(fr,en)=>wcLang==='en'?en:fr;
 // Public Turnstile site key only. Empty until a real widget is configured.
 // The secret key must be configured exclusively in Supabase Auth.
-const WC_TURNSTILE_SITE_KEY='';
+const WC_TURNSTILE_SITE_KEY='0x4AAAAAAGSRmUUaaSuyxpdE';
 let wcCaptchaToken='',wcCaptchaWidget=null;
 function initAuthCaptcha(){
  if(!WC_TURNSTILE_SITE_KEY)return;
