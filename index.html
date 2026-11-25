@@ -100,6 +100,10 @@ input[type=checkbox]{width:auto;min-width:20px;min-height:20px;vertical-align:mi
 <label for="wc-language" style="text-align:center">Langue / Language <select id="wc-language" style="font:inherit;padding:8px;border-radius:8px"><option value="fr">🇫🇷 Français</option><option value="en">🇺🇸 English</option></select></label>
 </header>
 <p><small>🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.</small></p>
+<figure id="wc-promo-figure" hidden style="margin:16px 0;text-align:center">
+<img id="wc-promo-image" width="1672" height="941" decoding="async" alt="Western Crush, rencontres country et western" style="display:block;width:100%;height:auto;max-height:none;object-fit:contain;border-radius:12px">
+<figcaption id="wc-promo-caption" style="font-size:.85rem;color:#e5bd99;margin-top:6px">Visuel promotionnel — maquette illustrative, bêta privée. Non disponible dans les boutiques pour le moment.</figcaption>
+</figure>
 <section id="wc-install-panel" aria-label="Installation mobile">
 <button id="wc-install" type="button">Installer Western Crush</button>
 <p id="wc-install-help" hidden></p>
@@ -147,6 +151,11 @@ Je certifie avoir 18 ans ou plus.
 (()=>{
  const panel=document.getElementById('wc-install-panel'),button=document.getElementById('wc-install'),help=document.getElementById('wc-install-help'),network=document.getElementById('wc-network-status');
  const en=document.documentElement.lang==='en', t=(fr,english)=>en?english:fr;
+ const promo=document.getElementById('wc-promo-image'),figure=document.getElementById('wc-promo-figure');
+ document.getElementById('wc-promo-caption').textContent=t('Visuel promotionnel — maquette illustrative, bêta privée. Non disponible dans les boutiques pour le moment.','Promotional artwork — illustrative mockup, private beta. Not available in app stores yet.');
+ promo.addEventListener('load',()=>{figure.hidden=false;},{once:true});
+ promo.src='./western-crush-visuel.jpg';
+
  let deferred=null;
  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
  const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
