@@ -17,7 +17,7 @@ const wcDistance=n=>Math.round(wcUnit==='mi'?n/1.609344:n);
 function wcSetPreferences(lang,unit){wcLang=lang==='en'?'en':'fr';wcUnit=unit==='mi'?'mi':'km';try{localStorage.setItem('wc-language',wcLang);localStorage.setItem('wc-unit',wcUnit);}catch{}document.documentElement.lang=wcLang;}
 
 const $ = id => document.getElementById(id);
-const site = 'https://western-crush.github.io/Western-Crush/';
+const site = 'https://western-crush.netlify.app/';
 wcSetPreferences(wcLang,wcUnit);
 const langPicker=$('wc-language');if(langPicker){langPicker.value=wcLang;langPicker.onchange=()=>act(async()=>{const next=langPicker.value==='en'?'en':'fr';if(user){const result=await db.from('profiles').update({preferred_language:next}).eq('id',user.id);check(result.error);}wcSetPreferences(next,wcUnit);location.reload();});}
 
