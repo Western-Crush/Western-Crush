@@ -168,20 +168,54 @@ function resetAuthCaptcha(){
  wcCaptchaToken='';
  if(wcCaptchaWidget!==null){try{window.turnstile.reset(wcCaptchaWidget);}catch{}}
 }
+// V18.25 — local password rules and bounded browser-side throttling.
+// Never store passwords, email addresses, or CAPTCHA tokens in the throttle state.
+function wcPasswordIssue(password){
+ if(typeof password!=='string'||Array.from(password).length<12)return 'length';
+ if(new TextEncoder().encode(password).length>72)return 'bytes';
+ if(!password.trim())return 'weak';
+ const n=password.normalize('NFKC').toLowerCase();
+ if(/^(.)\1{7,}$/u.test(n)||/^(?:0123456789|1234567890|123456789|azerty|qwerty|abcdef)+$/u.test(n))return 'weak';
+ if(/^(?:password|motdepasse|azerty|qwerty|welcome|bienvenue|westerncrush|admin|letmein|iloveyou|jesuisadmin|1234567890)[0-9!@#$%*._-]*$/u.test(n.replace(/\s/g,'')))return 'weak';
+ return null;
+}
+function wcValidateNewPassword(password){
+ const issue=wcPasswordIssue(password);
+ if(issue==='length')throw Error(authTr('Choisis au moins 12 caractères, idéalement 16 ou plus.','Choose at least 12 characters, ideally 16 or more.'));
+ if(issue==='bytes')throw Error(authTr('Mot de passe trop long pour le système de hachage (72 octets UTF-8 maximum).','Password too long for the hashing system (72 UTF-8 bytes maximum).'));
+ if(issue==='weak')throw Error(authTr('Ce mot de passe est trop prévisible. Choisis une phrase secrète unique ou un mot de passe généré.','This password is too predictable. Choose a unique passphrase or generated password.'));
+}
 let authBusy=false;
 let authTimes={login:0,register:0,recovery:0};
-let failedLogins=0;
-const authWait=()=>Error(authTr('Patiente quelques instants avant de réessayer.','Wait a moment before trying again.'));
+let failedLogins=0,failedLoginAt=0;
+const authStore='wc-auth-v2-';
+function authStored(key){try{return Number(localStorage.getItem(authStore+key))||0;}catch{return 0;}}
+function authSave(key,value){try{localStorage.setItem(authStore+key,String(value));}catch{}}
 function authDeadline(kind){
- let saved=0;try{saved=Number(sessionStorage.getItem('wc-auth-'+kind))||0;}catch{}
- return Math.max(authTimes[kind]||0,Math.min(saved,Date.now()+300000));
+ const now=Date.now(),saved=authStored(kind);
+ return Math.max(authTimes[kind]||0,saved>now&&saved<=now+300000?saved:0);
+}
+function authWait(kind){
+ const seconds=Math.max(1,Math.ceil((authDeadline(kind)-Date.now())/1000));
+ return Error(authTr('Patiente '+seconds+' seconde(s) avant de réessayer.','Wait '+seconds+' second(s) before trying again.'));
 }
 function authDelay(kind,ms){
  authTimes[kind]=Date.now()+ms;
- try{sessionStorage.setItem('wc-auth-'+kind,String(authTimes[kind]));}catch{}
+ authSave(kind,authTimes[kind]);
+}
+function authFailedLogin(rateLimited){
+ const now=Date.now(),last=authStored('failed-at');
+ const stored=last<=now&&now-last<900000?Math.max(0,Math.min(6,Math.floor(authStored('failures')))):0;
+ if(now-failedLoginAt>=900000)failedLogins=0;
+ failedLogins=Math.min(6,Math.max(failedLogins,stored)+1);failedLoginAt=now;
+ authSave('failures',failedLogins);authSave('failed-at',now);
+ authDelay('login',rateLimited?60000:Math.min(60000,2000*2**failedLogins));
+}
+function authClearFailures(){
+ failedLogins=0;failedLoginAt=0;authSave('failures',0);authSave('failed-at',0);authDelay('login',0);
 }
 async function guardedAuth(kind,fn){
- if(authBusy||Date.now()<authDeadline(kind))throw authWait();
+ if(authBusy||Date.now()<authDeadline(kind))throw authWait(kind);
  authBusy=true;
  const buttons=[$('login'),$('register'),forgot];
  for(const b of buttons)b.disabled=true;
@@ -200,11 +234,11 @@ $('register').onclick = () => act(async () => {
  if(!$('wc-beta-rules')?.checked)throw Error(authTr('Veuillez lire et reconnaître les règles provisoires de la bêta.','Please read and acknowledge the draft beta rules.'));
  if(!$('adult').checked)throw Error(tr('Vous devez avoir 18 ans ou plus.'));
  const email=validAuthEmail(),password=$('password').value;
- if(password.length<12)throw Error(tr('Email valide et 12 caractères minimum requis.'));
+ wcValidateNewPassword(password);
  await guardedAuth('register',async()=>{
  const captcha=captchaOptions();authDelay('register',60000);
- const {error}=await db.auth.signUp({email,password,options:{emailRedirectTo:site,data:{adult_declared:true},...captcha}});
- $('password').value='';
+ let result;try{result=await db.auth.signUp({email,password,options:{emailRedirectTo:site,data:{adult_declared:true},...captcha}});}finally{$('password').value='';}
+ const {error}=result;
  if(error)throw Error(authErrorMessage(error));
  status(tr('Vérifiez votre boîte mail.'));
  });
@@ -214,14 +248,10 @@ $('login').onclick=()=>act(async()=>{
  if(!password)throw Error(authTr('Saisis ton mot de passe.','Enter your password.'));
  await guardedAuth('login',async()=>{
  const captcha=captchaOptions();authDelay('login',2000);
- const {error}=await db.auth.signInWithPassword({email,password,options:captcha});
- $('password').value='';
- if(error){
- failedLogins++;
- authDelay('login',error.status===429?60000:Math.min(30000,2000*2**Math.min(failedLogins,4)));
- throw Error(authErrorMessage(error));
- }
- failedLogins=0;authDelay('login',0);
+ let result;try{result=await db.auth.signInWithPassword({email,password,options:captcha});}catch{authFailedLogin(false);throw Error(authErrorMessage({status:503}));}finally{$('password').value='';}
+ const {error}=result;
+ if(error){authFailedLogin(error.status===429);throw Error(authErrorMessage(error));}
+ authClearFailures();
  status(tr('Connexion réussie.'));
  });
 });
@@ -250,10 +280,12 @@ function showRecovery(){
  const save=element('button',tr('Enregistrer le nouveau mot de passe'));save.type='submit';
  const cancel=element('button',tr('Annuler'));cancel.type='button';
  cancel.onclick=()=>act(async()=>{check((await db.auth.signOut()).error);recovering=false;form.remove();auth.hidden=false;});
- form.append(title,p,q,save,cancel);auth.after(form);
+ form.append(title,element('p',authTr('Utilise un mot de passe unique, idéalement 16 caractères ou plus. Un gestionnaire de mots de passe est recommandé.','Use a unique password, ideally 16 characters or more. A password manager is recommended.')),p,q,save,cancel);auth.after(form);
  form.onsubmit=e=>{e.preventDefault();void act(async()=>{
- if(p.value.length<12||p.value!==q.value)throw Error(tr('Les mots de passe doivent correspondre et contenir 12 caractères minimum.'));
- save.disabled=true;
+ if(save.disabled)return;
+ if(p.value!==q.value)throw Error(authTr('Les mots de passe doivent correspondre.','Passwords must match.'));
+ const newPassword=p.value;wcValidateNewPassword(newPassword);
+ save.disabled=true;cancel.disabled=true;p.disabled=true;q.disabled=true;
  try{
  const initial=await db.auth.getUser();check(initial.error);const recoveryUid=initial.data.user?.id;
  if(!recovering||!recoveryUid||!form.isConnected)throw Error(authTr('Lien de récupération invalide.','Invalid recovery link.'));
@@ -280,11 +312,11 @@ function showRecovery(){
  if(now.data.user?.id!==recoveryUid||!recovering||!form.isConnected)throw Error(authTr('Session expirée.','Session expired.'));
  const finalAal=await db.auth.mfa.getAuthenticatorAssuranceLevel();check(finalAal.error);
  if(finalAal.data.nextLevel==='aal2'&&finalAal.data.currentLevel!=='aal2')throw Error(authTr('Second facteur requis.','Second factor required.'));
- const changed=await db.auth.updateUser({password:p.value});if(changed.error)throw Error(authErrorMessage(changed.error));
+ const changed=await db.auth.updateUser({password:newPassword});if(changed.error)throw Error(authErrorMessage(changed.error));
  p.value=q.value='';
  check((await db.auth.signOut({scope:'global'})).error);
  recovering=false;form.remove();auth.hidden=false;status(tr('Mot de passe modifié. Reconnectez-vous.'));
- }finally{save.disabled=false;}
+ }finally{save.disabled=false;cancel.disabled=false;p.disabled=false;q.disabled=false;}
  });};
 }
 
