@@ -1709,7 +1709,7 @@ async function notifications() {
   if (!current()) return;
   if (r.error) { view.textContent = tr('Notifications indisponibles.'); }
   const regularRows=Array.isArray(r.data)?r.data:[];
-  view.replaceChildren(element('h2',tr('🔔 Mes notifications')),actionButton(tr('Actualiser'),notifications),actionButton(tr('Tout marquer comme lu'),async()=>{
+  view.replaceChildren(element('h2',tr('🔔 Mes notifications')),actionButton(tr('Actualiser'),notifications),actionButton(wcSupportText('Marquer les notifications de rencontre comme lues','Mark dating notifications as read'),async()=>{
     if (!current()) return;
     check((await db.rpc('mark_notifications_read',{p_id:null})).error);
     await refreshNotificationCount(); if(current()) await notifications();
