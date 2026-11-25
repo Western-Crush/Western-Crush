@@ -1614,6 +1614,34 @@ async function adminPrivacyRequests(){
  inventoryOutput.append(element('p',t('Inventaire uniquement : aucune suppression ni révocation effectuée.','Inventory only: no deletion or session revocation performed.')));
  }catch(e){if(current())inventoryOutput.textContent=t('Inventaire indisponible. Reconnectez-vous si nécessaire.','Inventory unavailable. Sign in again if needed.');throw e;}
  }),inventoryOutput);
+ const finalOutput=element('div');finalOutput.setAttribute('role','status');
+ const deleteBtn=actionButton(t('Supprimer définitivement le compte TEST','Permanently delete TEST account'),async()=>{
+ if(!current()||deleteBtn.disabled)return;deleteBtn.disabled=true;
+ try{
+ if(!await adminConfirmation(t('Effacement irréversible du compte de test '+r.user_id+' dans la base active. Continuer ?','Irreversibly delete test account '+r.user_id+' from the active database. Continue?')))return;
+ const phrase='SUPPRIMER TEST '+r.id;
+ if(prompt(t('Pour confirmer, saisissez : ','To confirm, type: ')+phrase)!==phrase)return;
+ await requireAdmin(uid);if(!current())return;
+ const res=await db.functions.invoke('erasure-finalize-test',{body:{request_id:r.id,action:'delete',confirmation:phrase}});check(res.error);if(!current())return;
+ if(res.data?.deleted!==true||res.data.request_id!==r.id)throw Error(t('Suppression non confirmée.','Deletion not confirmed.'));
+ status(t('Compte de test supprimé. Preuve de traitement enregistrée.','Test account deleted. Completion receipt recorded.'));
+ await adminPrivacyRequests();
+ }catch(e){if(current())finalOutput.textContent=t('Suppression non confirmée. Vérifiez les preuves de traitement avant de réessayer.','Deletion not confirmed. Check completion receipts before retrying.');throw e;}
+ finally{deleteBtn.hidden=true;deleteBtn.style.display='none';deleteBtn.disabled=false;}
+ });
+ deleteBtn.hidden=true;deleteBtn.style.display='none';
+ const finalCheck=actionButton(t('Vérifier l’autorisation de suppression définitive','Check permanent deletion authorization'),async()=>{
+ if(!current())return;deleteBtn.hidden=true;deleteBtn.style.display='none';await requireAdmin(uid);if(!current())return;
+ finalOutput.textContent=t('Vérification en cours…','Checking…');
+ try{
+ const res=await db.functions.invoke('erasure-finalize-test',{body:{request_id:r.id,action:'check'}});check(res.error);if(!current())return;
+ const d=res.data;
+ if(d?.eligible===true&&d.deleted===false){finalOutput.textContent=t('Compte de test autorisé. Effacement possible après confirmation.','Authorized test account. Deletion possible after confirmation.');deleteBtn.hidden=false;deleteBtn.style.display='';return;}
+ const labels={test_authorization_required:t('Autorisation temporaire de test manquante ou expirée','Temporary test authorization missing or expired'),cleanup_required:t('Nettoyage préalable incomplet','Cleanup incomplete'),sessions_or_files_remaining:t('Sessions ou fichiers restants','Sessions or files remaining'),manual_retention_review:t('Messages ou signalements : examen manuel nécessaire','Messages or reports: manual review required'),local_billing_not_closed:t('Facturation non clôturée','Billing not closed'),test_stripe_required:t('Mode test Stripe requis','Stripe test mode required')};
+ finalOutput.replaceChildren(element('p',t('Suppression verrouillée.','Deletion locked.')));for(const b of d?.blockers||[])finalOutput.append(element('p',labels[b]||t('Contrôle manuel nécessaire.','Manual check required.')));
+ }catch(e){if(current())finalOutput.textContent=t('Contrôle impossible. Suppression verrouillée.','Check failed. Deletion locked.');throw e;}
+ });
+ card.append(finalCheck,finalOutput,deleteBtn);
  let cleaning=false;
  card.append(actionButton(t('Révoquer les sessions et nettoyer les photos TEST','Revoke sessions and clean TEST photos'),async()=>{
  if(!current()||cleaning)return;
@@ -1645,4 +1673,9 @@ async function adminPrivacyRequests(){
  if(r.user_id!==uid){if(r.status==='pending')card.append(change(t('Commencer le traitement','Start review'),'reviewing'));if(r.status==='reviewing'){if(r.kind!=='erasure')card.append(change(t('Confirmer le traitement effectué','Confirm completed processing'),'completed'));card.append(change(t('Refuser après examen','Reject after review'),'rejected'));}}
  view.append(card);
  }
+ const receipts=await db.from('erasure_completion_receipts').select('request_id,completed_at,scope,removed_messages,removed_reviewed_reports').order('completed_at',{ascending:false}).limit(50);
+ if(!current())return;check(receipts.error);
+ view.append(element('h2',t('Preuves de traitement','Completion receipts')));
+ if(!receipts.data?.length)view.append(element('p',t('Aucune preuve enregistrée.','No receipts recorded.')));
+ for(const receipt of receipts.data||[]){const c=element('article');c.append(element('p',t('Effacement base active — compte de test','Active database erasure — test account')),element('p',t('Demande : ','Request: ')+receipt.request_id),element('p',new Date(receipt.completed_at).toLocaleString(wcLocale())));view.append(c);}
 }
