@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#302016">
+<meta name="theme-color" content="#351a13">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -90,13 +90,111 @@ input[type=checkbox]{width:auto;min-width:20px;min-height:20px;vertical-align:mi
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
 
+
+/* V18.11 — Western Crush signature: leather, sunset gold, crimson and saddle stitching. */
+:root{
+ --wc-night:#1b100d;--wc-leather:#351a13;--wc-bark:#48291b;
+ --wc-gold:#eeb970;--wc-cream:#fff0d5;--wc-muted:#e3c09d;
+ --wc-crimson:#981f2e;--wc-crimson-dark:#721520;--wc-seam:#a87343;
+ color-scheme:dark;
+}
+body{
+ background:
+ radial-gradient(ellipse at 50% 0%,#a3542c55 0%,transparent 44rem),
+ linear-gradient(165deg,#402217 0%,#241510 45%,var(--wc-night) 100%);
+ color:var(--wc-cream);
+}
+main{max-width:940px}
+header{
+ position:relative;text-align:center;margin:8px 0 24px;padding:24px 16px 20px;
+ border:2px solid #c08a50;border-radius:25px 25px 20px 20px;
+ outline:1px dashed #c28d53;outline-offset:-9px;
+ background:
+ repeating-linear-gradient(117deg,#ffffff03 0px,#ffffff03 1px,transparent 1px,transparent 5px),
+ radial-gradient(ellipse at 50% 0%,#74352455,transparent 70%),
+ linear-gradient(135deg,#49261a,#2c140f 65%,#49261a);
+ box-shadow:0 16px 32px #0006,inset 0 1px 0 #f5bf7530;
+}
+.wc-brand-symbol{display:block;width:92px;height:70px;margin:0 auto 2px;color:var(--wc-gold)}
+header h1{font-family:Georgia,'Times New Roman',serif;font-weight:900;letter-spacing:-.045em;font-size:clamp(2rem,7vw,4rem);line-height:1.08;color:#ffe0a3;text-shadow:0 2px 0 #713b20,0 4px 12px #0009;margin:0}
+header h1 .wc-brand-accent{color:#ffb8a4}
+header p{margin:9px 0;color:var(--wc-muted)}
+header p:first-of-type{font-family:Georgia,serif;font-weight:700;font-size:clamp(1rem,3vw,1.25rem);color:var(--wc-gold)}
+header label{margin:12px auto 0;color:var(--wc-muted);font-size:.9rem}
+h2,h3{color:var(--wc-gold);overflow-wrap:anywhere}
+h2{font-family:Georgia,serif}
+small{color:var(--wc-muted)}
+a{color:#ffd49c;text-underline-offset:3px}
+section,article{
+ background:linear-gradient(145deg,#49291c,#321b14 75%);
+ border:1px solid #ac794b;
+ box-shadow:0 10px 26px #0004,inset 0 1px 0 #f5bf7518;
+ border-radius:16px;
+}
+#auth{max-width:650px;margin:20px auto;padding:clamp(14px,4vw,28px)}
+#auth h2{text-align:center;margin-top:4px}
+#view{min-width:0}
+button{
+ color:#fff5e8;background:linear-gradient(180deg,#ad2938,#811725);
+ border:1px solid #c87568;border-radius:10px;font-weight:650;
+ box-shadow:0 2px 4px #0004;
+ transition:background-color .15s,border-color .15s;
+}
+#register,#login,#wc-install{min-height:48px}
+#register{background:linear-gradient(180deg,#f4c580,#c58c45);color:#30190e;border-color:#f4c580}
+#app nav{
+ background:linear-gradient(160deg,#3e2117,#2c1712);
+ border:1px solid var(--wc-seam);box-shadow:0 5px 18px #0004;
+ padding:9px;gap:7px;
+}
+#app nav button{background:#573020;color:#fff0d5;border:1px solid #a97549;border-radius:9px;font-size:.82rem;box-shadow:none}
+#app nav [data-tab=discover]{background:linear-gradient(180deg,#a42a35,#781a26);border-color:#d08e72}
+#app nav [data-tab=premium]{background:linear-gradient(180deg,#e7b368,#bd8240);color:#2b160e;border-color:#f1cc96}
+#app nav button[data-tab]::before{color:inherit}
+input:not([type=checkbox]):not([type=radio]),textarea,select,#view select,.search-filters select{
+ color-scheme:light;background:#fff0d8;color:#2a170f;border:1px solid #c28b52;border-radius:10px;
+}
+input::placeholder,textarea::placeholder{color:#78543b;opacity:1}
+input[type=checkbox],input[type=radio],progress{accent-color:var(--wc-crimson)}
+.wc-profile-card,.wc-detail{
+ background:linear-gradient(155deg,#563021,#2c1712 85%);
+ border:2px solid #c18a52;outline:1px dashed #b67d49;outline-offset:-7px;
+ box-shadow:0 12px 28px #0006;
+}
+.wc-profile-card{padding:16px}
+.wc-profile-card .member-photo{border:1px solid #d1a36b;border-radius:12px}
+.member-placeholder{background:radial-gradient(ellipse at center,#63402a,#2c1712);border:1px dashed #a87549;color:var(--wc-muted)}
+.wc-card-actions button:first-child{background:#553322;border-color:#a87343;color:var(--wc-cream)}
+.wc-card-actions button:last-child{background:linear-gradient(180deg,#b32c3e,#821727);border-color:#db897c}
+.wc-card-safety button{background:#45271b;border-color:#9d6a43;color:#ffe2bd}
+.wc-photo-zoom{background:transparent;box-shadow:none;border:none;padding:0}
+.wc-mine{background:#8f2332;border:1px solid #c66f71;color:#fff5e8}
+.wc-theirs{background:#553322;border-color:#ac794b}
+.wc-gallery>div,.wc-invisible,.search-filters,.wc-filters,.wc-passions,#wc-install-panel{background:#352017;border-color:#ad794b}
+.wc-celebration{background:#431c16;color:#ffe6b5;border-color:#edbd75;box-shadow:0 0 32px #e5a45955;max-width:calc(100vw - 24px);white-space:normal;text-align:center}
+.wc-lightbox{background:#291710;border-color:#d6a06a}
+footer{margin-top:28px;border-top:1px dashed #a87343;padding:16px 0;text-align:center}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #ffda9c;outline-offset:3px}
+@media(hover:hover){button:not(:disabled):hover{border-color:#ffda9c;filter:brightness(1.08)}.wc-photo-zoom:hover{filter:none}}
+@media(max-width:700px){main{max-width:100%}header{padding:19px 12px 16px;margin-bottom:16px}.wc-brand-symbol{width:74px;height:56px}#app nav button{font-size:.8rem}#auth{padding:16px}.wc-profile-card{padding:12px}}
+@media(max-width:360px){header h1{font-size:1.95rem}.wc-brand-symbol{width:64px;height:49px}}
+@media(prefers-reduced-motion:reduce){button{transition:none}}
+
 </style>
 </head>
 <body>
 <main>
 <header>
-<h1>★ Western Crush</h1>
-<p>Le coup de foudre au Far West • 18+</p><p><small>Version V18.10</small></p>
+<svg class="wc-brand-symbol" viewBox="0 0 120 88" aria-hidden="true" focusable="false">
+<defs><linearGradient id="wc-rope-gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffe2a1"/><stop offset=".5" stop-color="#eeb970"/><stop offset="1" stop-color="#a96b34"/></linearGradient></defs>
+<path d="M60 78C45 65 17 48 17 28 17 8 43 4 60 23 77 4 103 8 103 28 103 48 75 65 60 78Z" fill="none" stroke="url(#wc-rope-gold)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M60 78C45 65 17 48 17 28 17 8 43 4 60 23 77 4 103 8 103 28 103 48 75 65 60 78Z" fill="none" stroke="#7e482a" stroke-width="1.3" stroke-dasharray="2 5" stroke-linecap="round"/>
+<path d="M26 43Q40 50 50 45L54 28Q60 23 66 28L70 45Q82 50 94 43Q90 56 60 57Q30 56 26 43Z" fill="#ffe2a1" stroke="#663820" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M51 43Q60 46 69 43" fill="none" stroke="#981f2e" stroke-width="4"/>
+<path d="M60 78Q69 85 79 80" fill="none" stroke="#eeb970" stroke-width="4" stroke-linecap="round"/>
+</svg>
+<h1>Western <span class="wc-brand-accent">Crush</span></h1>
+<p>Le coup de foudre au Far West • 18+</p><p><small>Version V18.11</small></p>
 <label for="wc-language" style="text-align:center">Langue / Language <select id="wc-language" style="font:inherit;padding:8px;border-radius:8px"><option value="fr">🇫🇷 Français</option><option value="en">🇺🇸 English</option></select></label>
 </header>
 <p><small>🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.</small></p>
