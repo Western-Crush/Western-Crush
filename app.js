@@ -542,6 +542,7 @@ async function profile() {
 
   const photos = element('div');
   photos.append(element('h2', tr('Ma photo de profil')));
+  photos.append(element('p',wcLang==='en'?'Photos are hidden from other members until manually approved. Share only permitted photos of yourself. Sexual, violent, exploitative and non-consensual content is prohibited.':'Les photos restent masquées aux autres membres jusqu’à leur validation manuelle. Publiez uniquement des photos autorisées de vous-même. Les contenus sexuels, violents, d’exploitation et non consentis sont interdits.'));
 
   const img = element('img');
   img.alt = tr('Ma photo de profil');
@@ -1100,13 +1101,13 @@ async function reportMember(target, name, back) {
   const select = element('select'); select.required = true;
   select.style.cssText = 'display:block;width:100%;padding:11px;border-radius:9px;margin:8px 0;font:inherit';
   const placeholder = element('option', tr('Choisir un motif')); placeholder.value = ''; select.append(placeholder);
-  for (const [reason,en] of [['Faux profil','Fake profile'],['Usurpation d’identité','Impersonation'],['Photo utilisée sans consentement','Photo used without consent'],['Harcèlement ou insultes','Harassment or insults'],['Suspicion de compte mineur','Suspected underage account'],['Arnaque ou escroquerie','Scam or fraud'],['Comportement inapproprié','Inappropriate conduct'],['Autre raison','Other reason']]) {
+  for (const [reason,en] of [['Faux profil','Fake profile'],['Usurpation d’identité','Impersonation'],['Photo utilisée sans consentement','Photo used without consent'],['Contenu sexuel explicite','Explicit sexual content'],['Suspicion d’exploitation sexuelle de mineur','Suspected child sexual exploitation'],['Image intime non consentie','Non-consensual intimate image'],['Contenu violent ou menaçant','Violent or threatening content'],['Harcèlement ou insultes','Harassment or insults'],['Suspicion de compte mineur','Suspected underage account'],['Arnaque ou escroquerie','Scam or fraud'],['Comportement inapproprié','Inappropriate conduct'],['Autre raison','Other reason']]) {
     const option = element('option', wcLang==='en'?en:reason); option.value = reason; select.append(option);
   }
   label.append(select); form.append(label);
   const detailsLabel = element('label', tr('Informations complémentaires (facultatif)'));
-  const details = element('textarea'); details.maxLength = 900; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
-  form.append(element('small',wcLang==='en'?'Describe the issue without sharing identity documents, private contact details or intimate images. If you cannot access your account, contact elorium.digital@gmail.com.':'Décrivez le problème sans transmettre de pièce d’identité, de coordonnées privées ou d’image intime. Si vous ne pouvez pas accéder à votre compte, contactez elorium.digital@gmail.com.'));
+  const details = element('textarea'); details.maxLength = 850; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
+  form.append(element('small',wcLang==='en'?'Identify the profile and, if possible, the photo position in the gallery. Do not download, copy or forward any potentially illegal image. If you cannot access your account, contact elorium.digital@gmail.com.':'Indiquez le profil et, si possible, la position de la photo dans la galerie. Ne téléchargez, ne copiez et ne transmettez aucune image potentiellement illégale. Si vous ne pouvez pas accéder à votre compte, contactez elorium.digital@gmail.com.'));
   const send = element('button', tr('Envoyer le signalement')); send.type = 'submit'; form.append(send);
   form.onsubmit = e => { e.preventDefault(); act(async () => {
     if (user?.id !== uid || rev !== revision || !select.value || send.disabled) return;
@@ -1379,7 +1380,7 @@ async function administration() {
     }
     view.append(element('h2',tr('Signalements')));
     if (!reports.length) view.append(element('p',tr('Aucun signalement.')));
-    const priorityReport = x => /^(Suspicion de compte mineur|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
+    const priorityReport = x => /^(Suspicion de compte mineur|Suspicion d’exploitation sexuelle de mineur|Image intime non consentie|Contenu sexuel explicite|Contenu violent ou menaçant|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
     const orderedReports = [...reports].sort((a,b) => Number(Boolean(a.reviewed))-Number(Boolean(b.reviewed)) || Number(priorityReport(b))-Number(priorityReport(a)));
     for (const x of orderedReports) {
       const card = element('article');
@@ -1550,7 +1551,7 @@ async function renderGallery(panel,target,own,uid,rev){
   const r=await db.from('profile_photos').select('id,photo_url,position').eq('user_id',target).order('position');
   if(!current())return; check(r.error);
   panel.replaceChildren(element('h2',own?tr('Ma galerie (6 photos supplémentaires)'):tr('Galerie privée')));
-  panel.append(element('small',own?tr('Visible par vos matchs autorisés. JPEG, PNG ou WebP, 5 Mo maximum.'):tr('Photos accessibles uniquement aux matchs autorisés.')));
+  panel.append(element('small',own?(wcLang==='en'?'Manual approval required before your matches can see a photo. JPEG, PNG or WebP, max 5 MB.':'Validation manuelle nécessaire avant toute diffusion à vos matchs. JPEG, PNG ou WebP, 5 Mo maximum.'):(wcLang==='en'?'Only approved photos are accessible to authorized matches.':'Seules les photos approuvées sont accessibles aux matchs autorisés.')));
   const grid=element('div');grid.className='wc-gallery';panel.append(grid);
   for(let pos=1;pos<=6;pos++){
     const row=r.data.find(x=>x.position===pos); if(!row&&!own)continue;
