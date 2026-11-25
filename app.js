@@ -1524,7 +1524,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(appealLabel('Journal des incidents','Incident journal'),adminIncidentJournal),actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Data retention':'Conservation des données',adminRetentionReview),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(wcLang==='en'?'🤠 Sheriff — AI assistant':'🤠 Shérif — Assistant IA',adminSheriffAssistant),actionButton(appealLabel('Journal des incidents','Incident journal'),adminIncidentJournal),actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Data retention':'Conservation des données',adminRetentionReview),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -2088,4 +2088,68 @@ async function adminSecurityMonitoring(){
  const audit=element('article');audit.append(element('h3',t('Journaux d’authentification','Authentication logs')),element('p',t('Entrées de la table d’audit sur 24 h : ','Audit table entries in 24 hours: ')+d.auth_audit_records_24h),element('p',t('Un total nul ne signifie pas absence de tentatives. Consulte aussi les journaux Supabase.','Zero entries does not mean no attempts. Also check Supabase logs.')));
  const link=element('a',t('Ouvrir les journaux Supabase','Open Supabase logs'));link.href='https://supabase.com/dashboard/project/krfphvzbgjkhvwwkmuol/logs/explorer';link.target='_blank';link.rel='noopener noreferrer';audit.append(link);
  view.replaceChildren(element('h2',t('Surveillance de sécurité','Security monitoring')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser','Refresh'),adminSecurityMonitoring),panel,alerts,audit);
+}
+
+
+// V18.12 — Sheriff: read-only administrative guidance; optional on-device language model.
+async function adminSheriffAssistant(){
+ const uid=user?.id, rev=++revision, view=$('view'), current=()=>user?.id===uid&&revision===rev;
+ const en=wcLang==='en', t=(fr,english)=>en?english:fr;
+ await requireAdmin(uid);if(!current())return;
+ const result=element('article'), recommendations=element('article'), ai=element('article');
+ result.append(element('p',t('Analyse des compteurs en cours…','Analyzing counters…')));
+ view.replaceChildren(element('h2',t('🤠 Shérif — Assistant IA','🤠 Sheriff — AI assistant')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser le diagnostic','Refresh diagnosis'),adminSheriffAssistant),
+ element('p',t('Assistant privé en lecture seule. Diagnostic par règles, résumé IA local facultatif. Aucune sanction, suppression, modification ou activation des paiements automatique.','Private read-only assistant. Rule-based diagnosis, optional local AI summary. No automatic sanctions, deletions, changes or payment activation.')),result,recommendations,ai);
+ const [security,retention]=await Promise.allSettled([db.rpc('admin_security_overview'),db.rpc('wc_admin_retention_review')]);
+ if(!current())return;await requireAdmin(uid);if(!current())return;
+ const data=security.status==='fulfilled'&&!security.value.error?security.value.data:null;
+ const rows=retention.status==='fulfilled'&&!retention.value.error&&Array.isArray(retention.value.data)?retention.value.data:null;
+ const snapshot={};
+ const number=(value)=>{if(typeof value!=='number'&&typeof value!=='string')return null;if(value==='')return null;const n=Number(value);return Number.isSafeInteger(n)&&n>=0?n:null;};
+ const fields=[
+ ['pending_reports','Signalements à traiter','Pending reports',adminPhotoReview],
+ ['admin_mfa_missing','Administrateurs sans MFA complète','Administrators without full MFA',adminSecurity],
+ ['unconfirmed_accounts','Comptes non confirmés','Unconfirmed accounts',adminSecurityMonitoring],
+ ['report_limit_accounts','Comptes au plafond de signalements','Accounts at report limit',adminSecurityMonitoring],
+ ['like_limit_accounts','Comptes au plafond de likes','Accounts at like limit',adminSecurityMonitoring],
+ ['message_limit_accounts','Comptes au plafond de messages','Accounts at message limit',adminSecurityMonitoring],
+ ['suspended_accounts','Comptes suspendus','Suspended accounts',adminSuspensionAppeals]];
+ result.replaceChildren(element('h3',t('Diagnostic en direct','Live diagnosis')));
+ recommendations.append(element('h3',t('Actions proposées','Suggested actions')));
+ let flagged=0,unknown=0;
+ for(const [key,fr,english,fn] of fields){
+  const value=number(data?.[key]);snapshot[key]=value;
+  result.append(element('p',t(fr,english)+' : '+(value===null?t('Indisponible','Unavailable'):value)));
+  if(value===null){unknown++;continue;}
+  if(value>0&&key!=='suspended_accounts'){
+   flagged++;
+   const target=key==='pending_reports'?administration:fn;
+   recommendations.append(element('p',t(fr,english)+' : '+value+'. '+t('À examiner manuellement.','Review manually.')),actionButton(t('Ouvrir le contrôle','Open review'),target));
+  }
+ }
+ const rights=number(rows?.find(x=>x.category==='rights_deadline')?.review_due);
+ snapshot.privacy_review_due=rights;
+ result.append(element('p',t('Demandes RGPD à réexaminer','Privacy requests due for review')+' : '+(rights===null?t('Indisponible','Unavailable'):rights)));
+ if(rights===null)unknown++;else if(rights>0){flagged++;recommendations.append(element('p',t('Examiner les échéances RGPD : ','Review privacy deadlines: ')+rights),actionButton(t('Demandes RGPD','Privacy requests'),adminPrivacyRequests));}
+ if(!flagged)recommendations.append(element('p',unknown?t('Diagnostic incomplet : aucune conclusion globale possible.','Incomplete diagnosis: no overall conclusion possible.'):t('Aucun signal parmi les compteurs examinés. Cela ne prouve pas l’absence de faille.','No flags in the reviewed counters. This does not prove the absence of vulnerabilities.')));
+ recommendations.append(element('p',t('Les plafonds ne prouvent pas une fraude. Stripe, AgeVerif, déploiements et tests externes restent à vérifier séparément.','Limits do not prove fraud. Stripe, AgeVerif, deployments and external tests require separate checks.')),actionButton(t('Modération des photos','Photo moderation'),adminPhotoReview),actionButton(t('Conservation des données','Data retention'),adminRetentionReview),actionButton(t('Journal des incidents','Incident journal'),adminIncidentJournal));
+ ai.append(element('h3',t('Synthèse IA sur cet appareil','AI summary on this device')),element('p',t('Si un modèle local compatible est déjà disponible, il peut résumer uniquement ces compteurs. Aucun téléchargement déclenché, aucune clé API, aucun message ni photo de membre transmis. La synthèse peut être inexacte.','If a compatible local model is already available, it can summarize only these counters. No download initiated, API key, member message or photo sent. The summary may be inaccurate.')));
+ const out=element('p');out.setAttribute('role','status');out.style.whiteSpace='pre-wrap';
+ ai.append(actionButton(t('Générer une synthèse IA locale','Generate local AI summary'),async()=>{
+  await requireAdmin(uid);if(!current())return;
+  const model=globalThis.LanguageModel;
+  const lang=en?'en':'fr', opts={expectedInputs:[{type:'text',languages:[lang]}],expectedOutputs:[{type:'text',languages:[lang]}]};
+  if(!model||typeof model.availability!=='function'||typeof model.create!=='function'){out.textContent=t('Modèle local non pris en charge. Le diagnostic par règles reste disponible.','Local model unsupported. Rule-based diagnosis remains available.');return;}
+  let session=null;const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),25000);
+  try{
+   if(await model.availability(opts)!=='available'){if(current())out.textContent=t('Modèle local non installé ou indisponible. Aucun téléchargement lancé.','Local model not installed or unavailable. No download started.');return;}
+   if(!current()||abort.signal.aborted)return;
+   out.textContent=t('Synthèse locale en cours…','Generating local summary…');
+   session=await model.create({...opts,signal:abort.signal});
+   const instruction=t('Résume ces compteurs agrégés en français en trois recommandations maximum, sans inventer de faits. Null signifie inconnu. Ne propose ni sanction automatique, ni paiement, ni accès aux données personnelles. Ne conclus jamais que le site est sûr.','Summarize these aggregate counters in English in at most three recommendations, without inventing facts. Null means unknown. Do not suggest automatic sanctions, payments or personal data access. Never conclude that the site is safe.');
+   const answer=await session.prompt(instruction+'\\n'+JSON.stringify(snapshot),{signal:abort.signal});
+   if(!current())return;await requireAdmin(uid);if(current())out.textContent=String(answer).slice(0,1800);
+  }catch{if(current())out.textContent=t('Synthèse IA indisponible. Utilise le diagnostic par règles.','AI summary unavailable. Use the rule-based diagnosis.');}
+  finally{clearTimeout(timer);try{session?.destroy();}catch{}}
+ }),out);
 }
