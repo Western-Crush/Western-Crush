@@ -2,9 +2,13 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#302016">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Western Crush">
 <title>Western Crush</title>
 <style>
 *{box-sizing:border-box}
@@ -45,16 +49,62 @@ main{padding-bottom:32px}
 @media(max-width:700px){#app nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}}
 #view select{width:100%;padding:11px;border-radius:9px;margin:5px 0;font:inherit;background:#fff2df;color:#21150f;border:1px solid #a77b55}.wc-passions{border:1px solid #795036;border-radius:12px;display:flex;flex-wrap:wrap;gap:8px;padding:10px}.wc-passions label{display:flex;align-items:center;gap:5px;margin:0;padding:5px 8px;background:#513522;border-radius:8px}.wc-passions input{width:auto}.wc-detail{background:linear-gradient(140deg,#493124,#302016)}.wc-gallery{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}.wc-photo-zoom{display:block;width:100%;padding:0;background:transparent;cursor:zoom-in}.wc-photo-zoom img{display:block;margin:0}.wc-lightbox{max-width:94vw;max-height:94vh;background:#281a12;color:#ffe9c9;border:1px solid #b98645;border-radius:14px;padding:12px}.wc-lightbox::backdrop{background:#000c}.wc-lightbox img{display:block;width:auto;max-width:85vw;max-height:75vh;object-fit:contain}.wc-lightbox button{display:block;margin-left:auto}
 .wc-invisible{border:1px solid #b98645;border-radius:12px;padding:14px;margin:16px 0;background:#302116}.wc-invisible h3{color:#f6c479;margin-top:0}.wc-invisible button{margin-right:8px}.wc-invisible button:disabled{opacity:.55;cursor:not-allowed}.wc-invisible small{display:block;margin-top:8px}.wc-invisible [hidden]{display:none!important}
+
+/* V18.10 — mobile accessibility, safe areas, native keyboard and small viewports. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh;overflow-wrap:anywhere}
+main{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right));padding-top:max(12px,env(safe-area-inset-top));padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+#app nav button,button{min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #ffd48f;outline-offset:3px}
+button:disabled{opacity:.65;cursor:not-allowed}
+input,textarea,select{font-size:16px;max-width:100%;min-width:0}
+input[type=checkbox]{width:auto;min-width:20px;min-height:20px;vertical-align:middle;accent-color:#b56532}
+#view,section,article,.wc-gallery,.wc-deck{min-width:0}
+#app nav{gap:6px}
+#app nav button{min-width:0;margin:0}
+.wc-thread{max-height:55vh;max-height:55dvh;min-height:160px}
+.wc-composer textarea{resize:vertical;font-size:16px}
+.wc-lightbox{width:min(94vw,560px);max-height:88vh;max-height:88dvh;overflow:auto}
+.wc-lightbox img{max-width:100%;max-height:68vh;max-height:68dvh}
+#wc-install-panel{background:#302116;padding:12px;margin:12px 0;border-radius:12px;border:1px solid #795036}
+#wc-install-panel p{margin:8px 0}
+#wc-network-status{margin:8px 0;padding:10px;border:1px solid #dba45e;border-radius:8px;color:#ffe9c9}
+#wc-install-panel[hidden],#wc-install-help[hidden],#wc-network-status[hidden]{display:none}
+@media(max-width:700px){
+ main{max-width:100%}
+ section,article{padding:12px}
+ #app nav{position:static;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+ #app nav button{font-size:.82rem;padding:8px 5px}
+ .wc-profile-card .member-photo{height:clamp(200px,48vh,440px);height:clamp(200px,48dvh,440px)}
+ .wc-profile-card .member-placeholder{min-height:180px}
+ .wc-gallery input,.wc-gallery button{font-size:16px}
+ .wc-composer{flex-wrap:wrap}
+ .wc-composer textarea{flex:1 1 100%}
+ .wc-composer button{margin-left:auto;min-width:110px}
+}
+@media(max-width:360px){
+ h1{font-size:29px}
+ #app nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .wc-card-actions button,.wc-card-safety button{flex-basis:100%}
+ .wc-gallery{grid-template-columns:minmax(0,1fr)}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
+
 </style>
 </head>
 <body>
 <main>
 <header>
 <h1>★ Western Crush</h1>
-<p>Le coup de foudre au Far West • 18+</p><p><small>Version V18.9</small></p>
+<p>Le coup de foudre au Far West • 18+</p><p><small>Version V18.10</small></p>
 <label for="wc-language" style="text-align:center">Langue / Language <select id="wc-language" style="font:inherit;padding:8px;border-radius:8px"><option value="fr">🇫🇷 Français</option><option value="en">🇺🇸 English</option></select></label>
 </header>
 <p><small>🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.</small></p>
+<section id="wc-install-panel" aria-label="Installation mobile">
+<button id="wc-install" type="button">Installer Western Crush</button>
+<p id="wc-install-help" hidden></p>
+</section>
+<p id="wc-network-status" role="status" hidden></p>
 <p id="status" role="status"></p>
 <section id="auth">
 <h2>Rejoindre le saloon</h2>
@@ -73,7 +123,7 @@ Je certifie avoir 18 ans ou plus.
 <button id="login">Connexion</button>
 </section>
 <div id="app" hidden>
-<nav>
+<nav aria-label="Western Crush">
 <button data-tab="discover">Découvrir</button>
 <button data-tab="matches">Matchs</button>
 <button data-tab="profile">Profil</button>
@@ -93,6 +143,38 @@ Je certifie avoir 18 ans ou plus.
 <script>
 (()=>{let lang='fr';try{lang=localStorage.getItem('wc-language')||(navigator.language.startsWith('en')?'en':'fr')}catch{}if(lang!=='en')return;document.documentElement.lang='en';const d={"Le coup de foudre au Far West • 18+":"Love at first sight in the Wild West • 18+","🤠 Bienvenue sur Western Crush, le site de rencontres dédié aux passionnés de l’univers Country et Western. Découvrez des membres, échangez des likes, créez des matchs et discutez en privé après un match réciproque. Réservé aux 18 ans et plus. Version bêta — paiements en mode test.":"🤠 Welcome to Western Crush, the dating site for Country and Western enthusiasts. Discover members, exchange likes, match and chat privately after a mutual match. Ages 18+ only. Beta — test payments.","Rejoindre le saloon":"Join the saloon","Mot de passe (12 caractères minimum)":"Password (at least 12 characters)","Je certifie avoir 18 ans ou plus.":"I certify that I am 18 or older.","Inscription":"Sign up","Connexion":"Sign in","Découvrir":"Discover","Matchs":"Matches","Profil":"Profile","Déconnexion":"Sign out","🛡️ Votre sécurité est notre priorité. Ne partagez jamais votre adresse, vos coordonnées bancaires ou votre position exacte avec un inconnu. Vous pouvez bloquer un membre à tout moment. Vous pouvez également signaler un membre à la modération.":"🛡️ Your safety comes first. Never share your address, bank details or exact location with a stranger. You can block a member at any time and report a member to moderation.","© 2026 Western Crush — Tous droits réservés.":"© 2026 Western Crush — All rights reserved."};const w=document.createTreeWalker(document.querySelector('main'),NodeFilter.SHOW_TEXT);while(w.nextNode()){const n=w.currentNode,k=n.nodeValue.trim();if(Object.prototype.hasOwnProperty.call(d,k))n.nodeValue=n.nodeValue.replace(k,d[k]);}})();
 </script>
-<script type="module" src="app.js?v=18.9"></script>
+<script>
+(()=>{
+ const panel=document.getElementById('wc-install-panel'),button=document.getElementById('wc-install'),help=document.getElementById('wc-install-help'),network=document.getElementById('wc-network-status');
+ const en=document.documentElement.lang==='en', t=(fr,english)=>en?english:fr;
+ let deferred=null;
+ const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+ const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ const android=/Android/i.test(navigator.userAgent);
+ panel.setAttribute('aria-label',t('Installation mobile','Mobile installation'));
+ button.textContent=t('Installer Western Crush','Install Western Crush');
+ button.setAttribute('aria-controls','wc-install-help');
+ button.setAttribute('aria-expanded','false');
+ function sync(){panel.hidden=standalone();}
+ function showHelp(){
+  help.hidden=false;button.setAttribute('aria-expanded','true');
+  help.textContent=ios?t('Dans Safari : ouvrez Partager, choisissez « Sur l’écran d’accueil » puis Ajouter. Si proposé, activez « Ouvrir comme app web ».','In Safari: open Share, choose Add to Home Screen, then Add. If offered, enable Open as Web App.'):android?t('Dans Chrome : ouvrez le menu ⋮, puis « Installer l’application » ou « Ajouter à l’écran d’accueil », si disponible.','In Chrome: open the ⋮ menu, then Install app or Add to Home screen if available.'):t('Si votre navigateur propose l’installation d’une application web ou l’ajout à l’écran d’accueil, utilisez son menu.','Use your browser menu if it offers web app installation or adding to the home screen.');
+ }
+ window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferred=event;sync();});
+ window.addEventListener('appinstalled',()=>{deferred=null;panel.hidden=true;});
+ button.addEventListener('click',async()=>{
+  if(!deferred){showHelp();return;}
+  const prompt=deferred;deferred=null;
+  try{await prompt.prompt();const choice=await prompt.userChoice;if(choice?.outcome!=='accepted')showHelp();}catch{showHelp();}
+ });
+ function connectivity(){
+  network.hidden=navigator.onLine!==false;
+  network.textContent=t('Connexion Internet indisponible. Les profils, messages et paiements nécessitent une connexion.','Internet connection unavailable. Profiles, messages and payments require a connection.');
+ }
+ window.addEventListener('online',connectivity);window.addEventListener('offline',connectivity);
+ sync();connectivity();
+})();
+</script>
+<script type="module" src="app.js?v=18.10"></script>
 </body>
 </html>
