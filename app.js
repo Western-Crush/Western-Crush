@@ -1575,6 +1575,22 @@ async function adminPrivacyRequests(){
  for(const r of rows.sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at))){
  const card=element('article');card.append(element('h3',kinds[r.kind]+' — '+states[r.status]),element('p',t('Membre : ','Member: ')+r.user_id),element('p',t('Reçue : ','Received: ')+new Date(r.created_at).toLocaleString(wcLocale())));
  if(r.kind==='erasure')card.append(element('p',t('Suppression définitive verrouillée : vérifier Stripe, stockage, sessions et conservation.','Permanent deletion locked: verify Stripe, storage, sessions and retention.')));
+ if(r.kind==='erasure'&&r.user_id!==uid&&['pending','reviewing'].includes(r.status)){
+ const output=element('div');output.setAttribute('role','status');
+ card.append(actionButton(t('Contrôler Stripe et le compte','Check Stripe and account'),async()=>{
+ if(!current())return;await requireAdmin(uid);if(!current())return;
+ output.textContent=t('Contrôle en cours…','Checking…');
+ try{
+ const res=await db.functions.invoke('erasure-preflight',{body:{request_id:r.id}});check(res.error);if(!current())return;
+ const d=res.data;if(!d||d.deletion_allowed!==false)throw Error('Invalid check response');
+ output.replaceChildren(element('p',t('Abonnements connus : ','Known subscriptions: ')+d.known_subscriptions),element('p',t('Tentatives de paiement : ','Checkout attempts: ')+d.known_checkout_attempts),element('p',t('Photos de galerie : ','Gallery photos: ')+d.gallery_rows),element('p',t('Photo principale : ','Main photo: ')+(d.profile_photo?t('Oui','Yes'):t('Non','No'))));
+ const labels={subscription_reference_missing:t('Référence abonnement manquante','Missing subscription reference'),local_subscription_not_closed:t('Abonnement local non clôturé','Local subscription not closed'),checkout_reservation_unresolved:t('Réservation de paiement non résolue','Unresolved checkout reservation'),checkout_open:t('Session de paiement ouverte','Open checkout'),checkout_unpaid:t('Paiement non réglé','Unpaid checkout'),stripe_subscription_not_closed:t('Abonnement Stripe non clôturé','Stripe subscription not closed')};
+ for(const b of d.billing_blockers||[])output.append(element('p','⚠ '+(labels[b]||b)));
+ if(!d.billing_blockers?.length)output.append(element('p',t('Aucun blocage de facturation connu détecté.','No known billing blocker detected.')));
+ output.append(element('p',t('Suppression toujours verrouillée : contrôles complémentaires nécessaires.','Deletion still locked: further checks required.')));
+ }catch(e){if(current())output.textContent=t('Contrôle impossible. Suppression verrouillée.','Check failed. Deletion locked.');throw e;}
+ }),output);
+ }
  const change=(label,next)=>actionButton(label,async()=>{if(!current())return;if(!await adminConfirmation(label+' ?'))return;await requireAdmin(uid);if(!current())return;check((await db.rpc('review_privacy_request',{p_request:r.id,p_status:next})).error);if(current())await adminPrivacyRequests();});
  if(r.user_id!==uid){if(r.status==='pending')card.append(change(t('Commencer le traitement','Start review'),'reviewing'));if(r.status==='reviewing'){if(r.kind!=='erasure')card.append(change(t('Confirmer le traitement effectué','Confirm completed processing'),'completed'));card.append(change(t('Refuser après examen','Reject after review'),'rejected'));}}
  view.append(card);
