@@ -134,7 +134,7 @@ function element(tag, text) {
 async function getSubscriptions(uid) {
   const { data, error } = await db
     .from('subscriptions')
-    .select('plan,status,current_period_end,next_plan,next_plan_at,cancel_at_period_end,cancel_at')
+    .select('plan,status,current_period_end,next_plan,next_plan_at,cancel_at_period_end,cancel_at,currency')
     .eq('user_id', uid);
 
   check(error);
@@ -576,7 +576,13 @@ async function premium() {
 
   if (user?.id !== uid || rev !== revision) return;
 
+  const profileResult=await db.from('profiles').select('country_code').eq('id',uid).maybeSingle();
+  if(user?.id!==uid || rev!==revision)return;
+  check(profileResult.error);
+  if(!profileResult.data){view.replaceChildren(element('p',wcLang==='en'?'Save your profile before subscribing.':'Enregistrez votre profil avant de vous abonner.'),actionButton(wcLang==='en'?'My profile':'Mon profil',profile));return;}
   const active = getActiveSubscription(subscriptions);
+  const currency=active?.currency || subscriptions.find(x=>!['canceled','incomplete_expired'].includes(x.status))?.currency || (profileResult.data.country_code==='US'?'usd':'eur');
+  const formatPrice=amount=>new Intl.NumberFormat(wcLocale(),{style:'currency',currency:currency.toUpperCase()}).format(amount/100)+(wcLang==='en'?' / month':' / mois');
 
   const pending = subscriptions.some(s =>
     !['canceled', 'incomplete_expired'].includes(s.status)
@@ -606,8 +612,8 @@ async function premium() {
     );
     const changeAt = new Date(active.next_plan_at || 0);
     const next = {
-      cowboy: { name: '🤠 Cowboy Premium', price: tr('9,99 € / mois') },
-      vip: { name: tr('⭐ Shérif VIP'), price: tr('19,99 € / mois') }
+      cowboy: { name: '🤠 Cowboy Premium', price: formatPrice(999) },
+      vip: { name: tr('⭐ Shérif VIP'), price: formatPrice(1999) }
     }[active.next_plan];
     const notice = element('div');
     notice.style.cssText = 'padding:12px;margin:12px 0;border:1px solid #b98645;border-radius:10px;background:#49321f;color:#f6c479';
@@ -678,12 +684,12 @@ async function premium() {
     {
       id: 'cowboy',
       name: '🤠 Cowboy Premium',
-      price: tr('9,99 € / mois')
+      price: formatPrice(999)
     },
     {
       id: 'vip',
       name: tr('⭐ Shérif VIP'),
-      price: tr('19,99 € / mois')
+      price: formatPrice(1999)
     }
   ];
 
@@ -708,7 +714,7 @@ async function premium() {
           ? tr('📅 Changement programmé')
           : active || pending
           ? tr('Abonnement déjà enregistré')
-          : "S'abonner — Test"
+          : (wcLang==='en'?'Subscribe — Test':"S'abonner — Test")
     );
 
     btn.disabled = !!active || pending;
