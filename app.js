@@ -49,6 +49,7 @@ async function act(fn) {
 }
 
 $('register').onclick = () => act(async () => {
+  if (!$('wc-beta-rules')?.checked) throw Error(wcLang==='en'?'Please read and acknowledge the draft beta rules.':'Veuillez lire et reconnaître les règles provisoires de la bêta.');
   if (!$('adult').checked)
     throw Error(tr('Vous devez avoir 18 ans ou plus.'));
 
@@ -120,6 +121,34 @@ $('logout').onclick = () => act(async () => {
   check(error);
   status(tr('Déconnexion réussie.'));
 });
+
+
+async function recordLegalEvent(eventType){
+  const uid=user?.id;if(!uid)throw Error(wcLang==='en'?'Sign in required':'Connexion obligatoire');
+  const result=await db.from('beta_legal_events').insert({user_id:uid,document_version:'beta-0.1',event_type:eventType,language:wcLang});
+  check(result.error);
+}
+async function legalSettings(){
+  const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
+  const en=wcLang==='en', t=(fr,english)=>en?english:fr;
+  view.replaceChildren(element('h2',t('Confidentialité et droits','Privacy and rights')));
+  const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal.html';link.target='_blank';link.rel='noopener';view.append(link);
+  const result=await db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).order('recorded_at',{ascending:false}).limit(100);
+  if(user?.id!==uid||rev!==revision)return;check(result.error);
+  const events=result.data||[], acknowledged=events.some(x=>x.event_type==='beta_terms_acknowledged');
+  const consent=events.find(x=>['sensitive_opt_in','sensitive_withdrawn'].includes(x.event_type));
+  const panel=element('article');panel.append(element('p',t('Documents provisoires : aucune acceptation de conditions définitives.','Draft documents: no acceptance of final legal terms.')));
+  const add=(label,type,question)=>actionButton(label,async()=>{if(user?.id!==uid||rev!==revision)return;if(question&&!confirm(question))return;await recordLegalEvent(type);if(user?.id===uid&&rev===revision){status(t('Demande ou choix enregistré.','Request or choice recorded.'));await legalSettings();}});
+  if(!acknowledged)panel.append(add(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),'beta_terms_acknowledged',t('Confirmez-vous avoir lu les règles provisoires ?','Confirm that you have read the draft beta rules?')));
+  else panel.append(element('p',t('Lecture des règles bêta enregistrée.','Beta rules acknowledgement recorded.')));
+  panel.append(element('h3',t('Préférences sensibles — facultatif','Sensitive preferences — optional')),element('p',t('Le consentement peut être retiré. Cette interface pilote enregistre votre choix ; elle ne garantit pas encore l’arrêt de tous les traitements. Ne fournissez pas de données sensibles pendant cette phase.','You may withdraw consent. This pilot records your choice; full processing restrictions are not yet implemented. Do not provide sensitive data during this phase.')));
+  panel.append(element('p',consent?.event_type==='sensitive_opt_in'?t('Choix pilote : accord','Pilot choice: opt in'):t('Choix pilote : aucun accord actif','Pilot choice: no active consent')));
+  panel.append(add(t('Retirer mon accord','Withdraw my consent'),'sensitive_withdrawn',t('Enregistrer le retrait ?','Record withdrawal?')));
+  panel.append(element('h3',t('Mes droits','My rights')),element('p',t('Ces boutons enregistrent une demande. Ils ne déclenchent pas encore un export ou une suppression automatique.','These buttons record a request. They do not yet trigger an automatic export or deletion.')));
+  panel.append(add(t('Demander mes données','Request my data'),'access_requested',t('Envoyer la demande d’accès ?','Submit access request?')),add(t('Demander la suppression de mon compte','Request account deletion'),'erasure_requested',t('Enregistrer une demande de suppression ? Le compte ne sera pas supprimé automatiquement.','Record a deletion request? Your account will not be automatically deleted.')));
+  view.append(panel);
+}
+const legalButton=$('wc-privacy');if(legalButton)legalButton.onclick=()=>act(legalSettings);
 
 const bucket = db.storage.from('profile-photos');
 
