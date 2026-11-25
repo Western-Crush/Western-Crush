@@ -237,6 +237,7 @@ const bucket = db.storage.from('profile-photos');
 function element(tag, text) {
   const el = document.createElement(tag);
   if (text) el.textContent = text;
+  if(tag==='img') {el.decoding='async';el.referrerPolicy='no-referrer';}
   return el;
 }
 
@@ -1082,10 +1083,11 @@ async function discover() {
     card.append(safety);
     deck.append(card);
     let start = null;
-    card.addEventListener('pointerdown', e => { if (busy || e.button !== 0 || e.target.closest('button')) return; start = {x:e.clientX,y:e.clientY,id:e.pointerId}; card.setPointerCapture(e.pointerId); });
+    card.addEventListener('pointerdown', e => { if (busy || e.button !== 0 || e.target.closest('button')) return; start = {x:e.clientX,y:e.clientY,id:e.pointerId}; try{card.setPointerCapture(e.pointerId);}catch{start=null;} });
     card.addEventListener('pointermove', e => { if (start?.id !== e.pointerId) return; const dx=e.clientX-start.x; card.style.transform = `translateX(${Math.max(-100,Math.min(100,dx))}px) rotate(${Math.max(-8,Math.min(8,dx/15))}deg)`; });
     function resetSwipe(){start=null;card.style.transform='';}
     card.addEventListener('pointercancel',resetSwipe);
+    card.addEventListener('lostpointercapture',resetSwipe);
     card.addEventListener('pointerup', e => { if(start?.id!==e.pointerId)return; const dx=e.clientX-start.x,dy=e.clientY-start.y;resetSwipe();if(busy || Math.abs(dx)<85 || Math.abs(dx)<Math.abs(dy)*1.5)return; if(dx<0)actions.children[0].click(); else if(!ownLikes.has(target))actions.children[1].click(); });
     void memberPhoto(card, target, uid, rev);
   }
@@ -1595,7 +1597,7 @@ const notificationButton = $('notifications');
 let notificationBusy = false;
 async function refreshNotificationCount() {
   const uid = user?.id;
-  if (!uid || notificationBusy) return;
+  if (!uid || notificationBusy || document.hidden || navigator.onLine===false) return;
   notificationBusy = true;
   try {
     const r = await db.rpc('get_my_notifications');
@@ -1717,11 +1719,12 @@ db.auth.onAuthStateChange((event, session) => {
 function showPresence(node,result){node.textContent=result.error?tr('Présence indisponible'):result.data?tr('● En ligne'):tr('● Hors ligne');node.className=result.data&&!result.error?'wc-online':'wc-offline';}
 const unreadButton=document.querySelector('[data-tab="matches"]');
 let unreadBusy=false;
-async function refreshUnread(){const uid=user?.id;if(!uid){unreadButton.textContent=tr('Matchs');return;}if(unreadBusy)return;unreadBusy=true;try{const r=await db.rpc('unread_messages_count');if(user?.id===uid)unreadButton.textContent=tr('Matchs')+(!r.error&&Number(r.data)>0?' · 💬 '+r.data:'');}finally{unreadBusy=false;}}
-async function heartbeat(){if(user&&!document.hidden)await db.rpc('update_presence');}
+async function refreshUnread(){const uid=user?.id;if(!uid){unreadButton.textContent=tr('Matchs');return;}if(unreadBusy||document.hidden||navigator.onLine===false)return;unreadBusy=true;try{const r=await db.rpc('unread_messages_count');if(user?.id===uid)unreadButton.textContent=tr('Matchs')+(!r.error&&Number(r.data)>0?' · 💬 '+r.data:'');}finally{unreadBusy=false;}}
+async function heartbeat(){if(user&&!document.hidden&&navigator.onLine!==false)await db.rpc('update_presence');}
 setInterval(()=>{void heartbeat().catch(()=>{});},30000);
-setInterval(()=>{void refreshUnread().catch(()=>{});},5000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});}});
+setInterval(()=>{void refreshUnread().catch(()=>{});},15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});void refreshNotificationCount();}});
+window.addEventListener('online',()=>{void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});void refreshNotificationCount();});
 db.auth.onAuthStateChange(()=>{setTimeout(()=>{void heartbeat().catch(()=>{});void refreshUnread().catch(()=>{});},0);});
 
 // V15 — galleries and detailed profiles
