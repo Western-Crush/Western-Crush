@@ -1602,6 +1602,19 @@ async function adminPrivacyRequests(){
  planOutput.replaceChildren(element('p',t('Abonnements à clôturer : ','Subscriptions to close: ')+d.subscriptions_to_close),element('p',t('Sessions de paiement ouvertes : ','Open checkouts: ')+d.open_checkouts),element('p',t('Fichiers photo principaux : ','Main photo files: ')+d.storage_inventory['profile-photos']),element('p',t('Fichiers galerie : ','Gallery files: ')+d.storage_inventory['profile-gallery']),element('p',t('Inventaire uniquement. Aucune résiliation ni suppression effectuée.','Inventory only. No cancellation or deletion performed.')));
  }catch(e){if(current())planOutput.textContent=t('Préparation impossible : contrôle manuel nécessaire.','Planning failed: manual review required.');throw e;}
  }),planOutput);
+ let closing=false;
+ card.append(actionButton(t('Résilier les abonnements TEST','Cancel TEST subscriptions'),async()=>{
+ if(!current()||closing)return;
+ if(!await adminConfirmation(t('Résilier immédiatement les abonnements de test de ce membre ?','Immediately cancel this member’s test subscriptions?')))return;
+ if(prompt(t('Pour confirmer, saisissez CLOTURER TEST','To confirm, type CLOTURER TEST'))!=='CLOTURER TEST')return;
+ await requireAdmin(uid);if(!current()||closing)return;
+ closing=true;planOutput.textContent=t('Clôture en cours…','Closing…');
+ try{
+ const r2=await db.functions.invoke('erasure-close-test-billing',{body:{request_id:r.id,confirmation:'CLOTURER TEST'}});check(r2.error);if(!current())return;
+ const d=r2.data;if(d?.billing_check!=='test_only'||d?.deletion_allowed!==false)throw Error('Invalid billing response');
+ planOutput.replaceChildren(element('p',t('Abonnements résiliés : ','Subscriptions canceled: ')+d.canceled),element('p',t('Sessions fermées : ','Sessions expired: ')+d.expired),element('p',t('Synchronisations en attente : ','Pending sync: ')+d.sync_pending),element('p',t('Relancer le contrôle Stripe pour vérifier le statut. Suppression verrouillée.','Run Stripe check again to verify status. Deletion locked.')));
+ }catch(e){if(current())planOutput.textContent=t('Clôture non confirmée : vérifier Stripe avant toute nouvelle tentative.','Closure not confirmed: check Stripe before retrying.');throw e;}finally{closing=false;}
+ }));
  }
  const change=(label,next)=>actionButton(label,async()=>{if(!current())return;if(!await adminConfirmation(label+' ?'))return;await requireAdmin(uid);if(!current())return;check((await db.rpc('review_privacy_request',{p_request:r.id,p_status:next})).error);if(current())await adminPrivacyRequests();});
  if(r.user_id!==uid){if(r.status==='pending')card.append(change(t('Commencer le traitement','Start review'),'reviewing'));if(r.status==='reviewing'){if(r.kind!=='erasure')card.append(change(t('Confirmer le traitement effectué','Confirm completed processing'),'completed'));card.append(change(t('Refuser après examen','Reject after review'),'rejected'));}}
