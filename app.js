@@ -1123,7 +1123,7 @@ async function reportMember(target, name, back) {
 
 function actionButton(label, fn) {
   const b = element('button', label); b.type = 'button';
-  b.onclick = () => act(async () => { b.disabled = true; try { await fn(); } finally { b.disabled = false; } });
+  b.onclick = () => { if (b.disabled) return; return act(async () => { if (b.disabled) return; b.disabled = true; try { await fn(); } finally { b.disabled = false; } }); };
   return b;
 }
 
@@ -1696,7 +1696,7 @@ async function adminPrivacyRequests(){
  }),inventoryOutput);
  const finalOutput=element('div');finalOutput.setAttribute('role','status');
  const deleteBtn=actionButton(t('Supprimer définitivement le compte TEST','Permanently delete TEST account'),async()=>{
- if(!current()||deleteBtn.disabled)return;deleteBtn.disabled=true;
+ if(!current()||deleteBtn.hidden)return;
  try{
  if(!await adminConfirmation(t('Effacement irréversible du compte de test '+r.user_id+' dans la base active. Continuer ?','Irreversibly delete test account '+r.user_id+' from the active database. Continue?')))return;
  const phrase='SUPPRIMER TEST '+r.id;
