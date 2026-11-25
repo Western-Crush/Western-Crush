@@ -1257,7 +1257,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats, element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -1560,4 +1560,23 @@ async function receivedLikes(){
   const profiles=await db.rpc('discover_members'); if(!current())return; check(profiles.error);
   const members=new Map((profiles.data||[]).map(p=>[p.id,p]));
   for(const like of r.data){const p=members.get(like.profile_id); if(!p)continue; const card=element('article'); card.append(element('h3',p.pseudo||tr('Membre')),element('small',new Date(like.liked_at).toLocaleString(wcLocale())),actionButton(tr('Voir le profil'),()=>detailedProfile(like.profile_id,p.pseudo,receivedLikes)));view.append(card);void renderVipBadge(card,like.profile_id,uid,rev);}
+}
+
+async function adminPrivacyRequests(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&rev===revision;
+ const t=(fr,en)=>wcLang==='en'?en:fr;
+ await requireAdmin(uid);if(!current())return;
+ const rows=await adminRows('privacy_requests','id,user_id,kind,status,created_at,reviewed_at,language');
+ await requireAdmin(uid);if(!current())return;
+ view.replaceChildren(element('h2',t('Demandes RGPD','Privacy requests')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser','Refresh'),adminPrivacyRequests));
+ const kinds={access:t('Accès','Access'),erasure:t('Suppression','Erasure'),withdrawal:t('Retrait','Withdrawal')};
+ const states={pending:t('En attente','Pending'),reviewing:t('En cours','Reviewing'),completed:t('Traitée','Completed'),rejected:t('Refusée','Rejected')};
+ if(!rows.length)view.append(element('p',t('Aucune demande.','No requests.')));
+ for(const r of rows.sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at))){
+ const card=element('article');card.append(element('h3',kinds[r.kind]+' — '+states[r.status]),element('p',t('Membre : ','Member: ')+r.user_id),element('p',t('Reçue : ','Received: ')+new Date(r.created_at).toLocaleString(wcLocale())));
+ if(r.kind==='erasure')card.append(element('p',t('Suppression définitive verrouillée : vérifier Stripe, stockage, sessions et conservation.','Permanent deletion locked: verify Stripe, storage, sessions and retention.')));
+ const change=(label,next)=>actionButton(label,async()=>{if(!current())return;if(!await adminConfirmation(label+' ?'))return;await requireAdmin(uid);if(!current())return;check((await db.rpc('review_privacy_request',{p_request:r.id,p_status:next})).error);if(current())await adminPrivacyRequests();});
+ if(r.user_id!==uid){if(r.status==='pending')card.append(change(t('Commencer le traitement','Start review'),'reviewing'));if(r.status==='reviewing'){if(r.kind!=='erasure')card.append(change(t('Confirmer le traitement effectué','Confirm completed processing'),'completed'));card.append(change(t('Refuser après examen','Reject after review'),'rejected'));}}
+ view.append(card);
+ }
 }
