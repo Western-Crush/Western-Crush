@@ -1337,7 +1337,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -1836,4 +1836,37 @@ async function adminSecurity(){
  }catch{if(current())out.textContent=t('Code refusé ou session non confirmée. Essaie un nouveau code.','Code rejected or session not confirmed. Try a new code.');}
  }),out);
  }
+}
+
+async function adminSecurityMonitoring(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ const t=(fr,en)=>wcLang==='en'?en:fr;
+ view.textContent=t('Vérification des accès…','Checking access…');
+ await requireAdmin(uid);if(!current())return;
+ const r=await db.rpc('admin_security_overview');check(r.error);if(!current())return;
+ await requireAdmin(uid);if(!current())return;
+ const d=r.data;
+ if(!d||!d.checked_at)throw Error(t('Données indisponibles.','Data unavailable.'));
+ const panel=element('article');
+ panel.append(element('p',t('Dernière vérification : ','Last check: ')+new Date(d.checked_at).toLocaleString(wcLocale())));
+ const fields=[
+ ['pending_reports','Signalements à traiter','Pending reports'],
+ ['suspended_accounts','Comptes suspendus','Suspended accounts'],
+ ['unconfirmed_accounts','Comptes sans e-mail confirmé','Unconfirmed accounts'],
+ ['admin_mfa_missing','Administrateurs sans protection MFA complète','Administrators without full MFA protection'],
+ ['report_limit_accounts','Comptes au plafond de signalements actuel','Accounts at current report limit'],
+ ['like_limit_accounts','Comptes au plafond de likes actuel','Accounts at current like limit'],
+ ['message_limit_accounts','Comptes au plafond de messages actuel','Accounts at current message limit']
+ ];
+ for(const [key,fr,en] of fields)panel.append(element('p',t(fr,en)+' : '+String(d[key]??'—')));
+ const alerts=element('article');alerts.append(element('h3',t('Alertes à consulter','Alerts to review')));
+ let n=0;
+ for(const [key,fr,en] of fields.filter(x=>x[0]!=='suspended_accounts')){
+ if(Number(d[key])>0){n++;alerts.append(element('p','⚠ '+t(fr,en)+' : '+d[key]));}
+ }
+ if(!n)alerts.append(element('p',t('Aucune alerte issue des compteurs actuels.','No alerts from current counters.')));
+ alerts.append(element('p',t('Ces plafonds sont des indicateurs à examiner, pas des preuves de fraude. Les refus et les attaques externes ne sont pas comptabilisés ici.','Limits are review indicators, not proof of fraud. Rejections and external attacks are not counted here.')));
+ const audit=element('article');audit.append(element('h3',t('Journaux d’authentification','Authentication logs')),element('p',t('Entrées de la table d’audit sur 24 h : ','Audit table entries in 24 hours: ')+d.auth_audit_records_24h),element('p',t('Un total nul ne signifie pas absence de tentatives. Consulte aussi les journaux Supabase.','Zero entries does not mean no attempts. Also check Supabase logs.')));
+ const link=element('a',t('Ouvrir les journaux Supabase','Open Supabase logs'));link.href='https://supabase.com/dashboard/project/krfphvzbgjkhvwwkmuol/logs/explorer';link.target='_blank';link.rel='noopener noreferrer';audit.append(link);
+ view.replaceChildren(element('h2',t('Surveillance de sécurité','Security monitoring')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser','Refresh'),adminSecurityMonitoring),panel,alerts,audit);
 }
