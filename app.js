@@ -210,11 +210,11 @@ async function legalSettings(){
  const t=(fr,en)=>wcLang==='en'?en:fr;
  view.replaceChildren(element('h2',t('Confidentialité et droits','Privacy and rights')));
  const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal.html';link.target='_blank';link.rel='noopener';view.append(link);
- const [events,requests]=await Promise.all([db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).eq('event_type','beta_terms_acknowledged').limit(1),db.from('privacy_requests').select('id,kind,status,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(50)]);
+ const [events,requests]=await Promise.all([db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).eq('event_type','beta_terms_acknowledged').eq('document_version','beta-0.1').limit(1),db.from('privacy_requests').select('id,kind,status,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(50)]);
  if(user?.id!==uid||rev!==revision)return;check(events.error);check(requests.error);
  const panel=element('article');
  panel.append(element('p',t('Documents provisoires.','Draft documents.')));
- if(!events.data?.length)panel.append(actionButton(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),async()=>{await recordLegalEvent('beta_terms_acknowledged');if(user?.id===uid&&rev===revision)await legalSettings();}));
+ if(!events.data?.length)panel.append(element('p',t('Lecture non enregistrée. Consultez les documents provisoires, puis confirmez uniquement après les avoir lus.','Acknowledgement not recorded. Read the draft documents before confirming.')),actionButton(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),async()=>{if(user?.id!==uid||rev!==revision)return;if(!confirm(t('Confirmez-vous avoir lu les documents provisoires ?','Confirm that you have read the draft documents?')))return;await recordLegalEvent('beta_terms_acknowledged');if(user?.id===uid&&rev===revision)await legalSettings();}));
  else panel.append(element('p',t('Lecture enregistrée.','Acknowledgement recorded.')));
  async function request(kind){const r=await db.from('privacy_requests').insert({user_id:uid,kind,language:wcLang});if(r.error?.code!=='23505')check(r.error);}
  panel.append(element('h3',t('Préférences sensibles','Sensitive preferences')),element('p',t('Les nouvelles préférences sensibles sont désactivées pendant la bêta. Vous pouvez effacer votre champ de préférence et demander un examen des autres données.','New sensitive preferences are disabled during beta. You can clear your preference field and request review of other data.')));
