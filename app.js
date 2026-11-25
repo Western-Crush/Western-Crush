@@ -1705,17 +1705,20 @@ async function notifications() {
   if (!uid) return;
   const current = () => user?.id === uid && revision === rev;
   view.textContent = tr('Chargement des notifications…');
-  const r = await db.rpc('get_my_notifications');
+  const [r,supportResult] = await Promise.allSettled([db.rpc('get_my_notifications'),db.rpc('wc_support_unread')]).then(results=>results.map(x=>x.status==='fulfilled'?x.value:{error:true,data:null}));
   if (!current()) return;
-  if (r.error) { view.textContent = tr('Notifications indisponibles.'); check(r.error); }
+  if (r.error) { view.textContent = tr('Notifications indisponibles.'); }
+  const regularRows=Array.isArray(r.data)?r.data:[];
   view.replaceChildren(element('h2',tr('🔔 Mes notifications')),actionButton(tr('Actualiser'),notifications),actionButton(tr('Tout marquer comme lu'),async()=>{
     if (!current()) return;
     check((await db.rpc('mark_notifications_read',{p_id:null})).error);
     await refreshNotificationCount(); if(current()) await notifications();
   }));
   const labels = {like:tr('❤️ Un membre apprécie votre profil.'),match:tr('💘 Vous avez un nouveau match !'),message:tr('💬 Vous avez reçu un message.')};
-  if (!r.data.length) view.append(element('p',tr('Aucune notification pour le moment.')));
-  for (const n of r.data.slice(0,100)) {
+  if(r.error)view.append(element('p',tr('Notifications indisponibles.')));
+  if(!regularRows.length&&!r.error)view.append(element('p',wcSupportText('Aucune notification de rencontre.','No dating notifications.')));
+  wcSupportNotificationPanel(view,supportResult,current);
+  for (const n of regularRows.slice(0,100)) {
     const card = element('article');
     card.append(element('h3',(n.is_read?'':'● ')+(labels[n.type] || tr('Nouvelle notification'))),element('small',new Date(n.created_at).toLocaleString(wcLocale())));
     if (!n.is_read) card.append(actionButton(tr('Marquer comme lue'),async()=>{
@@ -2366,7 +2369,18 @@ async function wcSupportThread(item,admin=false,offset=0){
  const r=await db.rpc('wc_support_thread',{p_ticket:item.id,p_admin:admin,p_limit:50,p_offset:offset});check(r.error);if(admin)await requireAdmin(uid);if(!current())return;
  view.append(element('h3',item.subject),element('small',item.id),wcSupportWarning());
  const rows=Array.isArray(r.data)?r.data:[];
- for(const m of rows){const card=element('article'),body=element('p',m.body);body.style.whiteSpace='pre-wrap';body.style.overflowWrap='anywhere';card.append(element('strong',m.author_kind==='support'?t('Assistance Western Crush','Western Crush support'):t('Membre','Member')),element('small',wcSupportDate(m.created_at)),body);view.append(card);}
+ for(const m of rows){const card=element('article'),body=element('p',m.body);
+body.style.whiteSpace='pre-wrap';body.style.overflowWrap='anywhere';card.append(element('strong',m.author_kind==='support'?t('Assistance Western Crush','Western Crush support'):t('Membre','Member')),element('small',wcSupportDate(m.created_at)),body);view.append(card);}
+ if(!admin){
+  const displayed=rows.filter(m=>m.author_kind==='support').map(m=>m.id);
+  if(displayed.length)view.append(actionButton(t('Marquer les réponses affichées comme lues','Mark displayed replies as read'),async()=>{
+   if(!current())return;
+   const marked=await db.rpc('wc_support_mark_read',{p_ticket:item.id,p_messages:displayed});check(marked.error);
+   if(!current())return;
+   status(t('Réponses affichées marquées comme lues.','Displayed replies marked as read.'));
+   void wcSupportRefreshUnread();
+  }));
+ }
  if(offset>0)view.append(actionButton(t('Messages précédents','Previous messages'),()=>wcSupportThread(item,admin,Math.max(0,offset-50))));
  if(rows.length===50)view.append(actionButton(t('Messages suivants','Next messages'),()=>wcSupportThread(item,admin,offset+50)));
  if(item.status==='closed'){view.append(element('p',t('Ticket clôturé. Créez une nouvelle demande si nécessaire.','Ticket closed. Create a new request if needed.')));return;}
@@ -2387,3 +2401,52 @@ async function wcSupportThread(item,admin=false,offset=0){
 }
 const wcSupportButton=$('wc-support-tickets');
 if(wcSupportButton){wcSupportButton.textContent=wcSupportText('Assistance','Support');wcSupportButton.onclick=()=>act(()=>wcSupportList(false));}
+
+// V18.18 — private support reply notifications; no additional external service.
+let wcSupportUnreadBusy=false,wcSupportUnreadEpoch=0;
+function wcSupportCount(value){return Number.isSafeInteger(value)&&value>=0?value:null;}
+async function wcSupportRefreshUnread(){
+ const uid=user?.id,epoch=wcSupportUnreadEpoch;
+ if(!wcSupportButton||!uid||recovering||document.hidden||navigator.onLine===false||wcSupportUnreadBusy)return;
+ if(!wcIdleState?.ready||wcIdleState.uid!==uid)return;
+ wcSupportUnreadBusy=true;
+ try{
+  const r=await db.rpc('wc_support_unread');
+  if(user?.id!==uid||epoch!==wcSupportUnreadEpoch||!wcIdleState?.ready)return;
+  const count=r.error?null:wcSupportCount(r.data?.total);
+  wcSupportButton.textContent=wcSupportText('Assistance','Support')+(count===null?' · ?':count>0?' · '+count:'');
+ }catch{
+  if(user?.id===uid&&epoch===wcSupportUnreadEpoch)wcSupportButton.textContent=wcSupportText('Assistance','Support')+' · ?';
+ }finally{wcSupportUnreadBusy=false;}
+}
+function wcSupportNotificationPanel(view,response,current){
+ const t=wcSupportText,card=element('article');
+ card.append(element('h3',t('Réponses de l’assistance','Support replies')));
+ const total=response.error?null:wcSupportCount(response.data?.total);
+ if(total===null){card.append(element('p',t('Notifications d’assistance indisponibles.','Support notifications unavailable.')));view.append(card);return;}
+ card.append(element('p',total===0?t('Aucune réponse non lue.','No unread replies.'):t('Réponses non lues : ','Unread replies: ')+total));
+ const tickets=Array.isArray(response.data?.tickets)?response.data.tickets:[];
+ for(const item of tickets){
+  const count=wcSupportCount(item.unread_count);if(count===null||!count||typeof item.ticket_id!=='string')continue;
+  const row=element('article');
+  row.append(element('p',t('Ticket ','Ticket ')+item.ticket_id+' · '+count+' · '+(wcSupportStates()[item.status]||t('Statut indisponible','Status unavailable'))),element('small',wcSupportDate(item.latest_at)),
+   actionButton(t('Consulter les réponses','View replies'),async()=>{
+    if(!current())return;
+    await wcSupportThread({id:item.ticket_id,subject:t('Réponses de l’assistance','Support replies'),status:item.status},false);
+   }));
+  card.append(row);
+ }
+ card.append(actionButton(t('Tous mes tickets','All my tickets'),()=>wcSupportList(false)));
+ card.append(element('small',t('Les réponses de l’assistance se marquent séparément, depuis les messages affichés.','Support replies are marked separately from displayed messages.')));
+ view.append(card);
+}
+setInterval(()=>void wcSupportRefreshUnread(),30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)void wcSupportRefreshUnread();});
+window.addEventListener('online',()=>void wcSupportRefreshUnread());
+db.auth.onAuthStateChange((event,session)=>{
+ if(event==='SIGNED_OUT'||event==='INITIAL_SESSION'||event==='SIGNED_IN'||event==='PASSWORD_RECOVERY'){
+  wcSupportUnreadEpoch++;
+  if(wcSupportButton)wcSupportButton.textContent=wcSupportText('Assistance','Support');
+  if(session&&event!=='PASSWORD_RECOVERY')setTimeout(()=>void wcSupportRefreshUnread(),1000);
+ }
+});
