@@ -203,18 +203,18 @@ $('logout').onclick = () => act(async () => {
 
 async function recordLegalEvent(eventType){
   const uid=user?.id;if(!uid)throw Error(wcLang==='en'?'Sign in required':'Connexion obligatoire');
-  const result=await db.from('beta_legal_events').insert({user_id:uid,document_version:'beta-0.1',event_type:eventType,language:wcLang});
+  const result=await db.from('beta_legal_events').insert({user_id:uid,document_version:'beta-0.3',event_type:eventType,language:wcLang});
   check(result.error);
 }
 async function legalSettings(){
  const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
  const t=(fr,en)=>wcLang==='en'?en:fr;
  view.replaceChildren(element('h2',t('Confidentialité et droits','Privacy and rights')));
- const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal.html';link.target='_blank';link.rel='noopener';view.append(link);
- const [events,requests]=await Promise.all([db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).eq('event_type','beta_terms_acknowledged').eq('document_version','beta-0.1').limit(1),db.from('privacy_requests').select('id,kind,status,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(50)]);
+ const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal-beta-0.3.html';link.target='_blank';link.rel='noopener';view.append(link);
+ const [events,requests]=await Promise.all([db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).eq('event_type','beta_terms_acknowledged').eq('document_version','beta-0.3').limit(1),db.from('privacy_requests').select('id,kind,status,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(50)]);
  if(user?.id!==uid||rev!==revision)return;check(events.error);check(requests.error);
  const panel=element('article');
- panel.append(element('p',t('Documents provisoires.','Draft documents.')));
+ panel.append(element('p',t('Documents provisoires — beta-0.3.','Draft documents — beta-0.3.')),actionButton(t('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(t('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
  if(!events.data?.length)panel.append(element('p',t('Lecture non enregistrée. Consultez les documents provisoires, puis confirmez uniquement après les avoir lus.','Acknowledgement not recorded. Read the draft documents before confirming.')),actionButton(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),async()=>{if(user?.id!==uid||rev!==revision)return;if(!confirm(t('Confirmez-vous avoir lu les documents provisoires ?','Confirm that you have read the draft documents?')))return;await recordLegalEvent('beta_terms_acknowledged');if(user?.id===uid&&rev===revision)await legalSettings();}));
  else panel.append(element('p',t('Lecture enregistrée.','Acknowledgement recorded.')));
  async function request(kind){const r=await db.from('privacy_requests').insert({user_id:uid,kind,language:wcLang});if(r.error?.code!=='23505')check(r.error);}
@@ -791,7 +791,7 @@ async function premium() {
     ));
   }
 
-  view.append(info);
+  view.append(info,actionButton(wcLang==='en'?'Cancel my contract (test)':'Résilier mon contrat (test)',()=>contractTestView('cancel')),actionButton(wcLang==='en'?'Withdraw from my contract (test)':'Me rétracter (test)',()=>contractTestView('withdraw')));
 
   const plans = [
     {
@@ -1328,7 +1328,7 @@ function appealState(state){
 async function mySuspensionAppeals(){
  const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
  if(!uid)return;
- view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')));
+ view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')),actionButton(appealLabel('Résilier mon contrat (test)','Cancel my contract (test)'),()=>contractTestView('cancel')),actionButton(appealLabel('Me rétracter (test)','Withdraw from my contract (test)'),()=>contractTestView('withdraw')));
  const r=await db.rpc('wc_my_appeals');
  if(!current())return;
  if(r.error){
@@ -2152,4 +2152,55 @@ async function adminSheriffAssistant(){
   }catch{if(current())out.textContent=t('Synthèse IA indisponible. Utilise le diagnostic par règles.','AI summary unavailable. Use the rule-based diagnosis.');}
   finally{clearTimeout(timer);try{session?.destroy();}catch{}}
  }),out);
+}
+
+
+// V18.13 — separate consumer-rights simulation flows; never call Stripe or mutate an actual subscription.
+async function contractTestView(kind){
+ if(!['cancel','withdraw'].includes(kind))return;
+ const t=(fr,en)=>wcLang==='en'?en:fr, label=k=>k==='cancel'?t('Résiliation','Cancellation'):t('Rétractation','Withdrawal');
+ const uid=user?.id;
+ if(!uid){status(t('Connectez-vous pour tester ce parcours. Si la connexion est impossible : elorium.digital@gmail.com.','Sign in to test this flow. If unable to sign in: elorium.digital@gmail.com.'));$('auth')?.scrollIntoView({block:'start'});return;}
+ const rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ view.replaceChildren(element('h2',label(kind)+t(' — simulation uniquement',' — simulation only')),element('p',t('Cette démarche enregistre uniquement une déclaration fictive. Elle ne modifie aucun abonnement, ne résilie pas Stripe et ne déclenche aucun remboursement.','This flow records a simulated declaration only. It does not modify or cancel a Stripe subscription or issue a refund.')),actionButton(t('Autre démarche','Other procedure'),()=>contractTestView(kind==='cancel'?'withdraw':'cancel')));
+ const [options,history]=await Promise.all([db.rpc('wc_test_contract_options'),db.from('wc_test_contract_requests').select('id,subscription_id,kind,plan,currency,language,contract_created_at,indicative_period_end,recorded_at,environment').eq('user_id',uid).order('recorded_at',{ascending:false}).limit(100)]);
+ if(!current())return;check(options.error);check(history.error);
+ const contracts=Array.isArray(options.data)?options.data:[];
+ const choose=element('select'), field=element('label',t('Contrat à utiliser pour la simulation','Contract to use for simulation'));
+ const demo=element('option',t('Contrat fictif Cowboy EUR (démonstration)','Fictional Cowboy EUR contract (demo)'));demo.value='demo';choose.append(demo);
+ const date=x=>x?new Date(x).toLocaleString(wcLocale()):t('Non renseignée','Not provided');
+ for(const c of contracts){const o=element('option',c.plan.toUpperCase()+' · '+c.currency.toUpperCase()+' · '+c.status+' · '+date(c.created_at)+' · '+c.id.slice(0,8));o.value=c.id;choose.append(o);}
+ field.append(choose);const review=element('article'),form=element('article'),confirmBox=element('input');confirmBox.type='checkbox';
+ const checkLabel=element('label');checkLabel.append(confirmBox,document.createTextNode(t(' Je confirme vouloir enregistrer cette déclaration fictive.',' I confirm that I want to record this simulated declaration.')));
+ const submit=actionButton(t('Confirmer la '+label(kind).toLowerCase()+' fictive','Confirm simulated '+label(kind).toLowerCase()),async()=>{
+  if(!current()||!confirmBox.checked)return;
+  const id=choose.value==='demo'?null:choose.value;
+  if(id&&!contracts.some(c=>c.id===id))throw Error(t('Contrat invalide.','Invalid contract.'));
+  choose.disabled=true;confirmBox.disabled=true;
+  try{
+   const r=await db.rpc('wc_submit_test_contract_request',{p_subscription:id,p_kind:kind,p_language:wcLang});check(r.error);
+   if(!r.data?.id||r.data.environment!=='simulation')throw Error(t('Accusé indisponible.','Receipt unavailable.'));
+   if(current()){status(t('Déclaration fictive enregistrée. Aucun paiement modifié.','Simulated declaration recorded. No payment changed.'));await contractTestView(kind);}
+  }finally{choose.disabled=false;confirmBox.disabled=false;}
+ });
+ const renderReview=()=>{const c=contracts.find(x=>x.id===choose.value);
+  confirmBox.checked=false;submit.disabled=true;
+  review.replaceChildren(element('h3',t('Récapitulatif avant confirmation','Review before confirmation')),element('p',label(kind)+' · '+(c?c.plan.toUpperCase()+' '+c.currency.toUpperCase():t('Cowboy EUR — démonstration','Cowboy EUR — demo'))),element('p',t('Référence : ','Reference: ')+(c?.id||'DEMO')),element('p',kind==='cancel'?t('Fin de période indicative : ','Indicative period end: ')+date(c?.period_end):t('Date du contrat : ','Contract date: ')+date(c?.created_at)));
+  if(kind==='withdraw')review.append(element('p',t('Le délai légal et l’éligibilité au remboursement ne sont pas calculés par cette simulation. Aucun motif n’est exigé.','Statutory deadlines and refund eligibility are not calculated by this simulation. No reason required.')));
+  else review.append(element('p',t('La date affichée est indicative. Aucun renouvellement ne sera arrêté par cet essai.','The date is indicative. This test will not stop any renewal.')));
+ };
+ choose.onchange=renderReview;confirmBox.onchange=()=>submit.disabled=!confirmBox.checked;renderReview();
+ form.append(field,review,checkLabel,submit);view.append(form,element('h3',t('Accusés de réception de test','Test receipts')));
+ for(const r of history.data||[]){
+  const card=element('article'),line=label(r.kind)+' — '+r.plan.toUpperCase()+' '+r.currency.toUpperCase();
+  const recorded=new Date(r.recorded_at).toISOString();
+  const receipt=['WESTERN CRUSH — SIMULATION / TEST',line,'Référence / Reference: '+r.id,'Contrat / Contract: '+(r.subscription_id||'DEMO'),'Date UTC: '+recorded,'Aucun effet contractuel ou financier / No contractual or financial effect'].join('\n');
+  card.append(element('h3',line),element('p',date(r.recorded_at)),element('small',r.id),actionButton(t('Télécharger l’accusé de test','Download test receipt'),async()=>{if(!current())return;const url=URL.createObjectURL(new Blob([receipt],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='western-crush-test-'+r.id+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}));
+  view.append(card);
+ }
+ if(!history.data?.length)view.append(element('p',t('Aucun accusé de test.','No test receipts.')));
+ const support=element('a',t('Contacter le support si la connexion est impossible','Contact support if unable to sign in'));support.href='mailto:elorium.digital@gmail.com';view.append(support);
+}
+for(const [id,kind] of [['wc-test-cancel','cancel'],['wc-test-withdraw','withdraw']]){
+ const button=$(id);if(button)button.onclick=()=>act(()=>contractTestView(kind));
 }
