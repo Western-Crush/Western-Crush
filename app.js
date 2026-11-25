@@ -1253,6 +1253,23 @@ async function matches() {
     void memberPhoto(card, x.match_id, uid, rev);
   }
 }
+// V18.20 — local contextual safety warnings; no external classifier or automatic sanctions.
+function wcChatSafety(text){
+ const normalized=String(text||'').normalize('NFKC').toLowerCase();
+ const signals=[];
+ if(/https?\s*:\/\/|www\.|(?:\b(?:javascript|vbscript|data|file|ftp)\s*:)|\b(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy)\b/i.test(normalized))signals.push('link');
+ if(/(?:https?\b|\b[a-z0-9-]+\.(?:com|net|org|fr|info|io|xyz|top)\b)/i.test(normalized)&&!signals.includes('link'))signals.push('possible_link');
+ if(/\b(?:virement|paypal|western union|moneygram|cryptomonnaie|bitcoin|crypto|carte cadeau|cartes cadeaux|pcs|transcash|paysafecard|gift cards?|wire transfer|bank transfer|send money|env(?:oie|oyez)\s+(?:de\s+l['’])?argent)\b|\d\s*[€$]/i.test(normalized))signals.push('money');
+ if(/\b(?:mot de passe|password|code (?:sms|bancaire|de validation|de vérification|de sécurité|authenticator)|verification code|security code|one.time code|otp|iban|cvv|numéro de carte)\b/i.test(normalized))signals.push('credentials');
+ return signals;
+}
+function wcChatAdvice(signals){
+ const en=wcLang==='en', lines=[];
+ if(signals.includes('link')||signals.includes('possible_link'))lines.push(en?'Do not follow untrusted links. External links are restricted during beta.':'Ne suivez aucun lien non fiable. Les liens externes sont limités pendant la bêta.');
+ if(signals.includes('money'))lines.push(en?'Never send money, gift cards or cryptocurrency to a stranger.':'N’envoyez jamais d’argent, de carte cadeau ou de cryptomonnaie à un inconnu.');
+ if(signals.includes('credentials'))lines.push(en?'Never share passwords, verification codes or banking details.':'Ne communiquez jamais de mot de passe, code de validation ou coordonnées bancaires.');
+ return lines.join(' ');
+}
 async function conversation(target, name) {
   const uid = user?.id, rev = ++revision, view = $('view');
   if (!uid) return;
@@ -1279,6 +1296,8 @@ async function conversation(target, name) {
     clearTimeout(typingTimer);typingTimer=setTimeout(stopTyping,3500);
   });
   input.addEventListener('blur',stopTyping);
+  const safetyHint=element('p');safetyHint.setAttribute('role','status');safetyHint.hidden=true;
+  input.addEventListener('input',()=>{const signals=wcChatSafety(input.value);safetyHint.textContent=wcChatAdvice(signals);safetyHint.hidden=!signals.length;});
   let busy = false, reading = false, last = null;
   let live = false, pending = false;
   const mode = () => live ? tr('● Messagerie en temps réel') : tr('Actualisation de secours toutes les 3 secondes');
@@ -1305,7 +1324,9 @@ async function conversation(target, name) {
         if (!r.data.length) thread.append(element('p',tr('Aucun message. Lancez la conversation !')));
         for (const msg of r.data.slice().reverse()) {
           const bubble = element('div'); bubble.className = 'wc-bubble ' + (msg.sender_id === uid ? 'wc-mine' : 'wc-theirs');
-          bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString(wcLocale(),{dateStyle:'short',timeStyle:'short'}) + (msg.sender_id===uid?(msg.read_at?tr(' · ✓✓ Lu'):tr(' · ✓ Envoyé')):''))); thread.append(bubble);
+          bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString(wcLocale(),{dateStyle:'short',timeStyle:'short'}) + (msg.sender_id===uid?(msg.read_at?tr(' · ✓✓ Lu'):tr(' · ✓ Envoyé')):'')));
+          if(msg.sender_id!==uid){const signals=wcChatSafety(msg.content);if(signals.length){const hint=element('p',(wcLang==='en'?'Safety reminder: ':'Rappel de prudence : ')+wcChatAdvice(signals));hint.className='wc-safety-hint';bubble.append(hint);}}
+          thread.append(bubble);
         }
         thread.scrollTop = bottom ? thread.scrollHeight : oldTop; last = signature;
       }
@@ -1318,12 +1339,18 @@ async function conversation(target, name) {
     busy = true; send.disabled = true;
     const content = input.value.trim(); input.disabled = true;
     try {
-      check((await db.from('messages').insert({sender_id:uid,receiver_id:target,content})).error);
-      if(current()){input.value=''; stopTyping(); await refresh(); thread.scrollTop=thread.scrollHeight;}
+      const signals=wcChatSafety(content);
+      if(signals.includes('link'))throw Error(wcLang==='en'?'External links are restricted in beta chat.':'Les liens externes sont limités dans la messagerie bêta.');
+      const response=await db.from('messages').insert({sender_id:uid,receiver_id:target,content});
+      if(response.error?.code==='22023')throw Error(wcLang==='en'?'Message rejected by the beta chat link policy.':'Message refusé par la protection des liens de la bêta.');
+      check(response.error);
+      if(current()){input.value='';safetyHint.hidden=true;safetyHint.textContent=''; stopTyping(); await refresh(); thread.scrollTop=thread.scrollHeight;}
     } finally { busy=false; send.disabled=false; input.disabled=false; if(current()) input.focus(); }
   });
-  const composer = element('div'); composer.className='wc-composer'; composer.append(input,send);
-  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))));
+  const composer = element('div'); composer.className='wc-composer'; composer.append(input,safetyHint,send);
+  const safetyNotice=element('p',wcLang==='en'?'Stay safe: never send money or verification codes to strangers. External links are restricted during beta. Warnings are keyword-based and do not establish fraud.':'Restez prudent : n’envoyez ni argent ni codes à un inconnu. Les liens externes sont limités pendant la bêta. Les alertes par mots-clés ne prouvent pas une fraude.');
+  safetyNotice.className='wc-safety-hint';
+  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,safetyNotice,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))));
   const channel = db.channel('wc-chat-' + crypto.randomUUID());
   const onMessage = ({new: row}) => {
     if (!current() || !row) return;
