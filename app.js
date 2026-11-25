@@ -1602,6 +1602,18 @@ async function adminPrivacyRequests(){
  planOutput.replaceChildren(element('p',t('Abonnements à clôturer : ','Subscriptions to close: ')+d.subscriptions_to_close),element('p',t('Sessions de paiement ouvertes : ','Open checkouts: ')+d.open_checkouts),element('p',t('Fichiers photo principaux : ','Main photo files: ')+d.storage_inventory['profile-photos']),element('p',t('Fichiers galerie : ','Gallery files: ')+d.storage_inventory['profile-gallery']),element('p',t('Inventaire uniquement. Aucune résiliation ni suppression effectuée.','Inventory only. No cancellation or deletion performed.')));
  }catch(e){if(current())planOutput.textContent=t('Préparation impossible : contrôle manuel nécessaire.','Planning failed: manual review required.');throw e;}
  }),planOutput);
+ const inventoryOutput=element('div');inventoryOutput.setAttribute('role','status');
+ card.append(actionButton(t('Inventaire final des données','Final data inventory'),async()=>{
+ if(!current())return;await requireAdmin(uid);if(!current())return;
+ inventoryOutput.textContent=t('Inventaire en cours…','Checking inventory…');
+ try{
+ const r2=await db.rpc('erasure_data_inventory',{p_request:r.id});check(r2.error);if(!current())return;
+ const d=r2.data;if(d?.deletion_allowed!==false)throw Error('Invalid inventory');
+ inventoryOutput.replaceChildren();
+ for(const [key,fr,en] of [['auth_sessions','Sessions enregistrées','Recorded sessions'],['primary_files','Fichiers photo principaux','Main photo files'],['gallery_files','Fichiers galerie','Gallery files'],['other_owned_files','Autres fichiers associés','Other owned files'],['profile_rows','Profils','Profiles'],['gallery_rows','Entrées galerie','Gallery entries'],['sent_messages','Messages envoyés','Sent messages'],['received_messages','Messages reçus','Received messages'],['local_billing_blockers','Abonnements locaux non clôturés','Unclosed local subscriptions']])inventoryOutput.append(element('p',t(fr,en)+' : '+d[key]));
+ inventoryOutput.append(element('p',t('Inventaire uniquement : aucune suppression ni révocation effectuée.','Inventory only: no deletion or session revocation performed.')));
+ }catch(e){if(current())inventoryOutput.textContent=t('Inventaire indisponible. Reconnectez-vous si nécessaire.','Inventory unavailable. Sign in again if needed.');throw e;}
+ }),inventoryOutput);
  let closing=false;
  card.append(actionButton(t('Résilier les abonnements TEST','Cancel TEST subscriptions'),async()=>{
  if(!current()||closing)return;
