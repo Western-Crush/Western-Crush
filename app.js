@@ -1188,7 +1188,7 @@ async function discover() {
   showCard();
 }
 
-async function reportMember(target, name, back) {
+async function reportMember(target, name, back, context=null) {
   const uid = user?.id, rev = ++revision, view = $('view');
   if (!uid || !target || uid === target) return;
   view.replaceChildren(element('h2', tr('🚩 Signaler ') + name));
@@ -1201,10 +1201,12 @@ async function reportMember(target, name, back) {
   for (const [reason,en] of [['Faux profil','Fake profile'],['Usurpation d’identité','Impersonation'],['Photo utilisée sans consentement','Photo used without consent'],['Contenu sexuel explicite','Explicit sexual content'],['Suspicion d’exploitation sexuelle de mineur','Suspected child sexual exploitation'],['Image intime non consentie','Non-consensual intimate image'],['Contenu violent ou menaçant','Violent or threatening content'],['Harcèlement ou insultes','Harassment or insults'],['Suspicion de compte mineur','Suspected underage account'],['Arnaque ou escroquerie','Scam or fraud'],['Comportement inapproprié','Inappropriate conduct'],['Autre raison','Other reason']]) {
     const option = element('option', wcLang==='en'?en:reason); option.value = reason; select.append(option);
   }
+  if(context&&['Contenu violent ou menaçant','Harcèlement ou insultes'].includes(context.reason))select.value=context.reason;
   label.append(select); form.append(label);
   const detailsLabel = element('label', tr('Informations complémentaires (facultatif)'));
-  const details = element('textarea'); details.maxLength = 850; details.rows = 4; detailsLabel.append(details); form.append(detailsLabel);
+  const details = element('textarea'); details.maxLength = 850; details.rows = 4; if(context?.messageId&&/^[0-9a-f-]{36}$/i.test(context.messageId))details.value=(wcLang==='en'?'Message reference: ':'Référence du message : ')+context.messageId+'\n'; detailsLabel.append(details); form.append(detailsLabel);
   form.append(element('small',wcLang==='en'?'Identify the profile and, if possible, the photo position in the gallery. Do not download, copy or forward any potentially illegal image. If you cannot access your account, contact elorium.digital@gmail.com.':'Indiquez le profil et, si possible, la position de la photo dans la galerie. Ne téléchargez, ne copiez et ne transmettez aucune image potentiellement illégale. Si vous ne pouvez pas accéder à votre compte, contactez elorium.digital@gmail.com.'));
+  form.append(element('p',wcLang==='en'?'If you are in immediate danger in France, call 17 or 112. Reporting here is not an emergency service.':'En cas de danger immédiat en France, appelez le 17 ou le 112. Ce signalement ne remplace pas les secours.'));
   const send = element('button', tr('Envoyer le signalement')); send.type = 'submit'; form.append(send);
   form.onsubmit = e => { e.preventDefault(); act(async () => {
     if (user?.id !== uid || rev !== revision || !select.value || send.disabled) return;
@@ -1253,10 +1255,18 @@ async function matches() {
     void memberPhoto(card, x.match_id, uid, rev);
   }
 }
-// V18.20 — local contextual safety warnings; no external classifier or automatic sanctions.
+// V18.21 — local contextual safety warnings; no external classifier or automatic sanctions.
+function wcChatAbuse(text){
+ const n=String(text||'').normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+ const threat=/(?:je vais (?:te|vous) (?:tuer|frapper|faire du mal)|i (?:will|am going to) (?:kill|hurt|hit) you)/i.test(n);
+ const insult=/(?:tu es (?:un connard|une connasse|une salope)|you are (?:an asshole|a fucking idiot))/i.test(n);
+ const exact=/^(?:je vais (?:te|vous) (?:tuer|frapper|faire du mal)|i (?:will|am going to) (?:kill|hurt|hit) you|tu es (?:un connard|une connasse|une salope)|you are (?:an asshole|a fucking idiot))[\s!.?]*$/i.test(n);
+ return {threat,insult,exact};
+}
 function wcChatSafety(text){
  const normalized=String(text||'').normalize('NFKC').toLowerCase();
  const signals=[];
+ const abuse=wcChatAbuse(normalized);if(abuse.threat)signals.push('threat');if(abuse.insult)signals.push('insult');
  if(/https?\s*:\/\/|www\.|(?:\b(?:javascript|vbscript|data|file|ftp)\s*:)|\b(?:bit\.ly|tinyurl\.com|t\.co|cutt\.ly|is\.gd|rb\.gy)\b/i.test(normalized))signals.push('link');
  if(/(?:https?\b|\b[a-z0-9-]+\.(?:com|net|org|fr|info|io|xyz|top)\b)/i.test(normalized)&&!signals.includes('link'))signals.push('possible_link');
  if(/\b(?:virement|paypal|western union|moneygram|cryptomonnaie|bitcoin|crypto|carte cadeau|cartes cadeaux|pcs|transcash|paysafecard|gift cards?|wire transfer|bank transfer|send money|env(?:oie|oyez)\s+(?:de\s+l['’])?argent)\b|\d\s*[€$]/i.test(normalized))signals.push('money');
@@ -1265,6 +1275,7 @@ function wcChatSafety(text){
 }
 function wcChatAdvice(signals){
  const en=wcLang==='en', lines=[];
+ if(signals.includes('threat')||signals.includes('insult'))lines.push(en?'Potentially abusive wording. You can report or block the member. Context matters.':'Formulation potentiellement abusive. Vous pouvez signaler ou bloquer le membre. Le contexte compte.');
  if(signals.includes('link')||signals.includes('possible_link'))lines.push(en?'Do not follow untrusted links. External links are restricted during beta.':'Ne suivez aucun lien non fiable. Les liens externes sont limités pendant la bêta.');
  if(signals.includes('money'))lines.push(en?'Never send money, gift cards or cryptocurrency to a stranger.':'N’envoyez jamais d’argent, de carte cadeau ou de cryptomonnaie à un inconnu.');
  if(signals.includes('credentials'))lines.push(en?'Never share passwords, verification codes or banking details.':'Ne communiquez jamais de mot de passe, code de validation ou coordonnées bancaires.');
@@ -1325,7 +1336,7 @@ async function conversation(target, name) {
         for (const msg of r.data.slice().reverse()) {
           const bubble = element('div'); bubble.className = 'wc-bubble ' + (msg.sender_id === uid ? 'wc-mine' : 'wc-theirs');
           bubble.append(element('div',msg.content),element('small',new Date(msg.created_at).toLocaleString(wcLocale(),{dateStyle:'short',timeStyle:'short'}) + (msg.sender_id===uid?(msg.read_at?tr(' · ✓✓ Lu'):tr(' · ✓ Envoyé')):'')));
-          if(msg.sender_id!==uid){const signals=wcChatSafety(msg.content);if(signals.length){const hint=element('p',(wcLang==='en'?'Safety reminder: ':'Rappel de prudence : ')+wcChatAdvice(signals));hint.className='wc-safety-hint';bubble.append(hint);}}
+          if(msg.sender_id!==uid){const signals=wcChatSafety(msg.content);if(signals.length){const hint=element('p',(wcLang==='en'?'Safety reminder: ':'Rappel de prudence : ')+wcChatAdvice(signals));hint.className='wc-safety-hint';bubble.append(hint);if(signals.includes('threat')||signals.includes('insult'))bubble.append(actionButton(wcLang==='en'?'Report this message':'Signaler ce message',()=>reportMember(target,name,()=>conversation(target,name),{reason:signals.includes('threat')?'Contenu violent ou menaçant':'Harcèlement ou insultes',messageId:msg.id})));}}
           thread.append(bubble);
         }
         thread.scrollTop = bottom ? thread.scrollHeight : oldTop; last = signature;
@@ -1340,9 +1351,10 @@ async function conversation(target, name) {
     const content = input.value.trim(); input.disabled = true;
     try {
       const signals=wcChatSafety(content);
+      if(wcChatAbuse(content).exact)throw Error(wcLang==='en'?'Message rejected by the abuse protection. Rephrase respectfully.':'Message refusé par la protection contre les abus. Reformulez avec respect.');
       if(signals.includes('link'))throw Error(wcLang==='en'?'External links are restricted in beta chat.':'Les liens externes sont limités dans la messagerie bêta.');
       const response=await db.from('messages').insert({sender_id:uid,receiver_id:target,content});
-      if(response.error?.code==='22023')throw Error(wcLang==='en'?'Message rejected by the beta chat link policy.':'Message refusé par la protection des liens de la bêta.');
+      if(response.error?.code==='22023')throw Error(wcLang==='en'?'Message rejected by the beta safety policy.':'Message refusé par les protections de sécurité de la bêta.');
       check(response.error);
       if(current()){input.value='';safetyHint.hidden=true;safetyHint.textContent=''; stopTyping(); await refresh(); thread.scrollTop=thread.scrollHeight;}
     } finally { busy=false; send.disabled=false; input.disabled=false; if(current()) input.focus(); }
@@ -1350,7 +1362,13 @@ async function conversation(target, name) {
   const composer = element('div'); composer.className='wc-composer'; composer.append(input,safetyHint,send);
   const safetyNotice=element('p',wcLang==='en'?'Stay safe: never send money or verification codes to strangers. External links are restricted during beta. Warnings are keyword-based and do not establish fraud.':'Restez prudent : n’envoyez ni argent ni codes à un inconnu. Les liens externes sont limités pendant la bêta. Les alertes par mots-clés ne prouvent pas une fraude.');
   safetyNotice.className='wc-safety-hint';
-  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,safetyNotice,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))));
+  const blockButton=actionButton(wcLang==='en'?'Block member':'Bloquer ce membre',async()=>{
+    if(!current()||!confirm(wcLang==='en'?'Block this member? You will no longer be able to message each other.':'Bloquer ce membre ? Vous ne pourrez plus échanger de messages.'))return;
+    if(!current())return;
+    const r=await db.from('blocks').insert({blocker_id:uid,blocked_id:target});if(r.error?.code!=='23505')check(r.error);
+    if(current()){stopTyping();thread.replaceChildren();status(wcLang==='en'?'Member blocked.':'Membre bloqué.');await matches();}
+  });
+  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,safetyNotice,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))),blockButton);
   const channel = db.channel('wc-chat-' + crypto.randomUUID());
   const onMessage = ({new: row}) => {
     if (!current() || !row) return;
@@ -1685,7 +1703,7 @@ async function administration() {
     }
     view.append(element('h2',tr('Signalements')));
     if (!reports.length) view.append(element('p',tr('Aucun signalement.')));
-    const priorityReport = x => /^(Suspicion de compte mineur|Suspicion d’exploitation sexuelle de mineur|Image intime non consentie|Contenu sexuel explicite|Contenu violent ou menaçant|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
+    const priorityReport = x => /^(Suspicion de compte mineur|Suspicion d’exploitation sexuelle de mineur|Image intime non consentie|Contenu sexuel explicite|Contenu violent ou menaçant|Harcèlement ou insultes|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
     const orderedReports = [...reports].sort((a,b) => Number(Boolean(a.reviewed))-Number(Boolean(b.reviewed)) || Number(priorityReport(b))-Number(priorityReport(a)));
     for (const x of orderedReports) {
       const card = element('article');
