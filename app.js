@@ -1316,6 +1316,60 @@ function adminConfirmation(message, needsReason=false) {
   });
 }
 
+async function adminPhotoReview() {
+  const uid=user?.id,rev=++revision,view=$('view');
+  const current=()=>user?.id===uid&&revision===rev;
+  const en=wcLang==='en', t=(fr,english)=>en?english:fr;
+  let offset=0, loading=false, rows=[];
+  view.replaceChildren(element('h2',t('Modération des photos','Photo moderation')),actionButton(t('Retour à l’administration','Back to administration'),administration));
+  view.append(element('p',t('Examinez uniquement les photos ordinaires. En cas de suspicion d’exploitation sexuelle de mineur, ne consultez, ne copiez et ne transmettez pas l’image : masquez-la et suivez le protocole de signalement aux autorités.','Review ordinary photos only. If child sexual exploitation is suspected, do not view, copy or forward the image: hide it and follow the authorities reporting protocol.')));
+  const panel=element('section');view.append(panel);
+  async function load(){
+    if(!current()||loading)return; loading=true;
+    panel.textContent=t('Chargement…','Loading…');
+    try{
+      await requireAdmin(uid);
+      const r=await db.rpc('wc_admin_photo_queue',{p_limit:30,p_offset:offset});check(r.error);
+      if(!current())return;rows=r.data||[];panel.replaceChildren();
+      panel.append(actionButton(t('Actualiser','Refresh'),load));
+      if(offset>0)panel.append(actionButton(t('Précédent','Previous'),async()=>{offset=Math.max(0,offset-30);await load();}));
+      if(rows.length===30)panel.append(actionButton(t('Suivant','Next'),async()=>{offset+=30;await load();}));
+      if(!rows.length)panel.append(element('p',t('Aucune photo sur cette page.','No photos on this page.')));
+      for(const x of rows){
+        const card=element('article'), preview=element('div');
+        const state={pending:t('En attente','Pending'),approved:t('Approuvée','Approved'),hidden:t('Masquée','Hidden')}[x.review_state]||t('Inconnu','Unknown');
+        card.append(element('h3',state),element('small',x.bucket_id+' · '+x.object_id),element('p',t('Ajout : ','Uploaded: ')+new Date(x.uploaded_at).toLocaleString(wcLocale())),preview);
+        const show=actionButton(t('Examiner une photo ordinaire','Review ordinary photo'),async()=>{
+          if(!current())return;
+          if(!await adminConfirmation(t('Confirmer qu’aucune suspicion de contenu sexuel impliquant un mineur n’est connue pour cette image ?','Confirm there is no known suspicion of sexual content involving a child for this image?')))return;
+          await requireAdmin(uid);if(!current())return;
+          const a=await db.storage.from(x.bucket_id).createSignedUrl(x.object_name,30);check(a.error);
+          if(!current())return;
+          const img=element('img');img.alt=t('Photo à examiner','Photo for review');img.referrerPolicy='no-referrer';img.style.maxWidth='260px';
+          img.src=a.data.signedUrl;preview.replaceChildren(img,actionButton(t('Fermer l’aperçu','Close preview'),()=>{img.removeAttribute('src');preview.replaceChildren();}));
+        });
+        card.append(show);
+        for(const [decision,label,question] of [
+          ['approve',t('Approuver','Approve'),t('Confirmer avoir examiné cette photo et constaté sa conformité ?','Confirm you reviewed this photo and found it compliant?')],
+          [x.review_state==='approved'?'withdraw':'reject',t('Masquer / refuser','Hide / reject'),t('Masquer cette photo aux autres membres ?','Hide this photo from other members?')]
+        ]){
+          if(decision==='approve'&&x.review_state==='approved')continue;
+          card.append(actionButton(label,async()=>{
+            if(!current())return;const reason=await adminConfirmation(question,true);if(!reason)return;
+            if(reason.trim().length<3)throw Error(t('Motif : 3 caractères minimum.','Reason: at least 3 characters.'));
+            await requireAdmin(uid);if(!current())return;
+            const d=await db.rpc('wc_admin_review_photo',{p_object:x.object_id,p_decision:decision,p_reason:reason});check(d.error);
+            if(d.data!==true)throw Error(t('Décision non enregistrée.','Decision not saved.'));
+            if(current())await load();
+          }));
+        }
+        panel.append(card);
+      }
+    }catch(e){if(current())panel.textContent=e.message||t('Modération indisponible.','Moderation unavailable.');throw e;}finally{loading=false;}
+  }
+  await load();
+}
+
 async function administration() {
   const uid = user?.id, rev = ++revision, view = $('view');
   const current = () => user?.id === uid && rev === revision;
@@ -1340,7 +1394,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -1385,11 +1439,22 @@ async function administration() {
     for (const x of orderedReports) {
       const card = element('article');
       if (!x.reviewed && priorityReport(x)) card.append(element('strong',wcLang==='en'?'Priority review — allegation not confirmed':'Examen prioritaire — signalement non confirmé')); card.append(element('p','Membre signalé : '+name(x.reported_id)),element('p','Auteur : '+name(x.reporter_id)),element('p',x.reason),element('p',x.reviewed?tr('Traité'):tr('À traiter')));
-      if (!x.reviewed) card.append(actionButton(tr('Marquer comme traité'),async () => {
-        if (!current()) return; await requireAdmin(uid); if (!current()) return;
-        const r = await db.from('reports').update({reviewed:true}).eq('id',x.id).select('id'); check(r.error); if (!r.data.length) throw Error(tr('Signalement non modifié.'));
-        if (current()) await administration();
-      })); view.append(card);
+      if (!x.reviewed) {
+        const en=wcLang==='en';
+        card.append(element('small',en?'Take any necessary protective action before closing. No automatic sanction or authority notification.':'Prenez les mesures de protection nécessaires avant clôture. Aucune sanction ni transmission automatique aux autorités.'));
+        for(const [decision,label] of [['unfounded',en?'Unsubstantiated':'Non fondé'],['action_taken',en?'Action completed':'Mesure effectuée'],['referred',en?'Referred to competent service':'Transmis au service compétent']]){
+          card.append(actionButton(label,async()=>{
+            if(!current())return;
+            const reason=await adminConfirmation(label+' — '+(en?'Confirm decision and explain the reason':'Confirmer la décision et préciser le motif'),true);
+            if(!reason)return;
+            if(reason.trim().length<3)throw Error(en?'Reason: at least 3 characters.':'Motif : 3 caractères minimum.');
+            await requireAdmin(uid);if(!current())return;
+            const r=await db.rpc('wc_admin_close_report',{p_report:x.id,p_decision:decision,p_reason:reason});check(r.error);
+            if(r.data!==true)throw Error(tr('Signalement non modifié.'));
+            if(current())await administration();
+          }));
+        }
+      } view.append(card);
     }
     view.append(element('h2',tr('Abonnements — consultation uniquement')));
     for (const x of subscriptions) view.append(element('p',`${name(x.user_id)} · ${x.plan} · ${x.status} · ${x.current_period_end ? new Date(x.current_period_end).toLocaleDateString(wcLocale()) : '—'}`));
