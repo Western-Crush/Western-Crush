@@ -1243,7 +1243,7 @@ async function administration() {
   try {
     const mfa=await db.rpc('admin_mfa_status');check(mfa.error);if(!current())return;
     if(mfa.data?.administrator!==true)throw Error(tr('Accès administrateur refusé.'));
-    if((mfa.data.required||mfa.data.verified_factors>0)&&!mfa.data.aal2){await adminSecurity();return;}
+    if(mfa.data.recovery_hold||((mfa.data.required||mfa.data.verified_factors>0)&&!mfa.data.aal2)){await adminSecurity();return;}
     await requireAdmin(uid);
     const [members, reports, suspensions, subscriptions] = await Promise.all([
       adminRows('profiles','id,pseudo,age,city,discoverable'),
@@ -1696,15 +1696,19 @@ async function adminSecurity(){
  const verified=(factors.data.totp||[]).filter(x=>x.status==='verified');
  if(verified.length){
  panel.append(element('p',t('Application d’authentification configurée.','Authenticator app configured.')));
- if(state.data.aal2){panel.append(actionButton(t('Retour administration','Back to administration'),administration));return;}
+ if(!state.data.aal2){
  const choice=element('select');
  for(const factor of verified){const o=element('option',factor.friendly_name||t('Application d’authentification','Authenticator'));o.value=factor.id;choice.append(o);}
  panel.append(choice);
  addCode(panel,()=>choice.value,async()=>{await adminSecurity();});
  return;
  }
- if(state.data.required){panel.append(element('p',t('Aucun facteur utilisable : récupération par le propriétaire du projet nécessaire.','No usable factor: project owner recovery required.')));return;}
- panel.append(element('p',t('Installe une application d’authentification sur ton téléphone. Ne partage jamais le QR code, la clé secrète ou les codes à six chiffres.','Install an authenticator on your phone. Never share the QR code, secret or six-digit codes.')));
+ }
+ if(state.data.recovery_hold)panel.append(element('p',t('Récupération contrôlée : les droits administrateur restent bloqués jusqu’à validation par le propriétaire du projet.','Controlled recovery: administrator permissions remain blocked until the project owner approves.')));
+ if(!verified.length&&state.data.required&&!state.data.recovery_hold){panel.append(element('p',t('Aucun facteur utilisable : récupération par le propriétaire du projet nécessaire.','No usable factor: project owner recovery required.')));return;}
+ panel.append(element('p',verified.length?t('Facteurs vérifiés : ','Verified factors: ')+verified.length:t('Installe une application d’authentification sur ton téléphone.','Install an authenticator on your phone.')));
+ if(verified.length)panel.append(element('p',t('Configure un deuxième appareil indépendant comme secours. Conserve ton premier facteur.','Set up a second independent device as a backup. Keep your first factor.')));
+ panel.append(element('p',t('Ne partage jamais le QR code, la clé secrète ou les codes à six chiffres.','Never share the QR code, secret or six-digit codes.')));
  const pending=(factors.data.all||[]).filter(x=>x.factor_type==='totp'&&x.status==='unverified');
  if(pending.length){
  panel.append(element('p',t('Une configuration inachevée a été détectée. Annule-la avant de recommencer.','An unfinished setup was detected. Cancel it before starting again.')));
@@ -1716,9 +1720,11 @@ async function adminSecurity(){
  if(current())await adminSecurity();
  }));
  }else{
- panel.append(actionButton(t('Configurer la double authentification','Set up two-factor authentication'),async()=>{
+ panel.append(actionButton(verified.length?t('Ajouter un appareil de secours','Add a backup device'):t('Configurer la double authentification','Set up two-factor authentication'),async()=>{
  if(!current())return;
- const fresh=await db.rpc('admin_mfa_status');check(fresh.error);if(!current()||fresh.data?.administrator!==true||fresh.data?.required||fresh.data?.verified_factors>0)return;
+ const fresh=await db.rpc('admin_mfa_status');check(fresh.error);if(!current()||fresh.data?.administrator!==true)return;
+ if(fresh.data.verified_factors>0&&!fresh.data.aal2)throw Error(t('Vérifie ton premier facteur avant d’ajouter un secours.','Verify your first factor before adding a backup.'));
+ if(fresh.data.verified_factors===0&&fresh.data.required&&!fresh.data.recovery_hold)throw Error(t('Récupération par le propriétaire requise.','Project owner recovery required.'));
  const enrollment=await db.auth.mfa.enroll({factorType:'totp',issuer:'Western Crush',friendlyName:'Western Crush '+Date.now()});check(enrollment.error);if(!current())return;
  const data=enrollment.data;
  panel.replaceChildren(element('h3',t('Scanne ce QR code avec ton téléphone','Scan this QR code with your phone')),element('p',t('Ne fais pas de capture d’écran de ce QR code.','Do not take a screenshot of this QR code.')));
@@ -1738,7 +1744,7 @@ async function adminSecurity(){
  }));
  }));
  }
- panel.append(actionButton(t('Retour administration','Back to administration'),administration));
+ if(state.data.aal2&&!state.data.recovery_hold)panel.append(actionButton(t('Retour administration','Back to administration'),administration));
  function addCode(parent,getFactor,success){
  const label=element('label',t('Code à six chiffres','Six-digit code'));const input=element('input');input.type='text';input.inputMode='numeric';input.autocomplete='one-time-code';input.maxLength=6;input.placeholder='000000';label.append(input);
  const out=element('p');out.setAttribute('role','status');
