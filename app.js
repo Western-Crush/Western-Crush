@@ -134,6 +134,7 @@ $('login').onclick=()=>act(async()=>{
 const forgot=document.createElement('button');
 forgot.type='button';forgot.textContent=tr('Mot de passe oublié');
 $('login').after(forgot);
+const appealContact=element('p',wcLang==='en'?'Unable to sign in because of a restriction? Contact elorium.digital@gmail.com to appeal.':'Connexion bloquée par une restriction ? Contactez elorium.digital@gmail.com pour déposer un recours.');forgot.after(appealContact);
 forgot.onclick=()=>act(async()=>{
  const email=validAuthEmail();
  await guardedAuth('recovery',async()=>{
@@ -1316,6 +1317,81 @@ function adminConfirmation(message, needsReason=false) {
   });
 }
 
+const appealLabel=(fr,en)=>wcLang==='en'?en:fr;
+const appealButton=actionButton(appealLabel('Recours / suspension','Appeals / suspension'),mySuspensionAppeals);
+$('logout').before(appealButton);
+function appealState(state){
+ return ({pending:appealLabel('En attente','Pending'),accepted:appealLabel('Recours accepté','Appeal accepted'),rejected:appealLabel('Recours rejeté','Appeal rejected')})[state]||state;
+}
+async function mySuspensionAppeals(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ if(!uid)return;
+ view.replaceChildren(element('h2',appealLabel('Mes recours','My appeals')));
+ const r=await db.rpc('wc_my_appeals');
+ if(!current())return;
+ if(r.error){
+  view.append(element('p',appealLabel('Accès au recours indisponible. Contactez elorium.digital@gmail.com pour contester une restriction ou demander son motif.','Appeals unavailable. Contact elorium.digital@gmail.com to challenge a restriction or request its reason.')));
+  return;
+ }
+ const data=r.data||{};
+ view.append(element('p',data.suspended?appealLabel('Votre compte est suspendu. Vous pouvez contester la décision sans réactiver votre compte.','Your account is suspended. You can challenge the decision without restoring access.'):appealLabel('Aucune suspension active.','No active suspension.')));
+ view.append(element('p',appealLabel('Pour demander le motif de la suspension, une aide ou contester un bannissement empêchant la connexion : elorium.digital@gmail.com. Ne transmettez ni pièce d’identité ni contenu intime ou illégal.','For the reason for a suspension, assistance or an appeal against a login ban: elorium.digital@gmail.com. Do not send identity documents or intimate or illegal content.')));
+ if(data.can_submit){
+  const form=element('form'),label=element('label',appealLabel('Expliquez pourquoi vous contestez la décision (10 à 1500 caractères)','Explain why you challenge the decision (10–1500 characters)'));
+  const input=element('textarea');input.minLength=10;input.maxLength=1500;input.required=true;input.rows=6;label.append(input);
+  const send=element('button',appealLabel('Envoyer mon recours','Submit my appeal'));send.type='submit';
+  form.append(label,send);view.append(form);
+  form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+   if(!current()||send.disabled)return;
+   const msg=input.value.trim();if(msg.length<10||msg.length>1500)throw Error(appealLabel('Message invalide.','Invalid message.'));
+   send.disabled=true;try{
+    const a=await db.rpc('wc_submit_appeal',{p_message:msg});check(a.error);
+    if(!a.data)throw Error(appealLabel('Recours non enregistré.','Appeal not saved.'));
+    if(current()){status(appealLabel('Recours enregistré.','Appeal submitted.'));await mySuspensionAppeals();}
+   }finally{send.disabled=false;}
+  });};
+ }
+ view.append(actionButton(appealLabel('Actualiser mes recours','Refresh my appeals'),mySuspensionAppeals));
+ for(const a of data.appeals||[]){
+  const card=element('article');card.append(element('h3',appealState(a.status)),element('small',new Date(a.created_at).toLocaleString(wcLocale())),element('p',a.message));
+  if(a.decision_message)card.append(element('p',appealLabel('Décision : ','Decision: ')+a.decision_message));
+  if(a.status==='accepted')card.append(element('small',appealLabel('Un recours accepté ne réactive pas automatiquement le compte.','An accepted appeal does not automatically restore the account.')));
+  view.append(card);
+ }
+}
+async function adminSuspensionAppeals(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ let offset=0,loading=false;
+ view.replaceChildren(element('h2',appealLabel('Gestion des recours','Appeal management')),actionButton(appealLabel('Retour à l’administration','Back to administration'),administration));
+ const panel=element('section');view.append(panel);
+ async function load(){
+  if(!current()||loading)return;loading=true;panel.textContent=appealLabel('Chargement…','Loading…');
+  try{
+   await requireAdmin(uid);const r=await db.rpc('wc_admin_appeals',{p_limit:30,p_offset:offset});check(r.error);if(!current())return;
+   const rows=r.data||[];panel.replaceChildren(actionButton(appealLabel('Actualiser','Refresh'),load));
+   if(offset>0)panel.append(actionButton(appealLabel('Précédent','Previous'),async()=>{offset=Math.max(0,offset-30);await load();}));
+   if(rows.length===30)panel.append(actionButton(appealLabel('Suivant','Next'),async()=>{offset+=30;await load();}));
+   if(!rows.length)panel.append(element('p',appealLabel('Aucun recours sur cette page.','No appeals on this page.')));
+   for(const a of rows){
+    const card=element('article');card.append(element('h3',appealState(a.status)),element('small',a.user_id+' · '+new Date(a.created_at).toLocaleString(wcLocale())),element('p',a.message),element('small',a.still_suspended?appealLabel('Suspension concernée toujours active','Relevant suspension still active'):appealLabel('Suspension concernée inactive','Relevant suspension no longer active')));
+    if(a.decision_message)card.append(element('p',a.decision_message));
+    if(a.status==='pending')for(const [decision,label] of [['accepted',appealLabel('Accepter le recours','Accept appeal')],['rejected',appealLabel('Rejeter le recours','Reject appeal')]]){
+     card.append(actionButton(label,async()=>{
+      if(!current())return;
+      const reason=await adminConfirmation(label+' — '+appealLabel('Motif destiné au membre, sans données de tiers. La décision ne réactive pas le compte.','Reason visible to the member; no third-party data. This decision does not restore access.'),true);
+      if(!reason)return;if(reason.trim().length<10)throw Error(appealLabel('Motif : 10 caractères minimum.','Reason: at least 10 characters.'));
+      await requireAdmin(uid);if(!current())return;const d=await db.rpc('wc_admin_decide_appeal',{p_id:a.id,p_decision:decision,p_message:reason});check(d.error);
+      if(d.data!==true)throw Error(appealLabel('Décision non enregistrée.','Decision not saved.'));
+      if(current())await load();
+     }));
+    }
+    panel.append(card);
+   }
+  }catch(e){if(current())panel.textContent=e.message||appealLabel('Recours indisponibles.','Appeals unavailable.');throw e;}finally{loading=false;}
+ }
+ await load();
+}
+
 async function adminPhotoReview() {
   const uid=user?.id,rev=++revision,view=$('view');
   const current=()=>user?.id===uid&&revision===rev;
@@ -1394,7 +1470,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(appealLabel('Gestion des recours','Appeal management'),adminSuspensionAppeals),actionButton(wcLang==='en'?'Photo moderation':'Modération des photos',adminPhotoReview),actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests),actionButton(wcLang==='en'?'Security monitoring':'Surveillance sécurité',adminSecurityMonitoring), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -1552,6 +1628,10 @@ db.auth.onAuthStateChange((event, session) => {
   if (user) {
     if (previous !== user.id || event === 'INITIAL_SESSION') {
       setTimeout(() => act(async () => {
+        const enteringUid=user?.id;if(!enteringUid)return;
+        const appealAccess=await db.rpc('wc_my_appeals');
+        if(user?.id!==enteringUid)return;
+        if(!appealAccess.error&&appealAccess.data?.suspended===true){await mySuspensionAppeals();return;}
         const prefs=await db.from('profiles').select('preferred_language,distance_unit').eq('id',user.id).maybeSingle();
         if(!prefs.error&&prefs.data){const changed=wcLang!==prefs.data.preferred_language;wcSetPreferences(prefs.data.preferred_language,prefs.data.distance_unit);if(changed){try{if(localStorage.getItem('wc-language')===wcLang){location.reload();return;}}catch{}}}
         const payment = new URLSearchParams(
