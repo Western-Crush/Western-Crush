@@ -48,54 +48,76 @@ async function act(fn) {
   }
 }
 
+// V18.5: interface safeguards; Supabase Auth remains the authority.
+const authTr=(fr,en)=>wcLang==='en'?en:fr;
+let authBusy=false;
+let authTimes={login:0,register:0,recovery:0};
+let failedLogins=0;
+const authWait=()=>Error(authTr('Patiente quelques instants avant de réessayer.','Wait a moment before trying again.'));
+function authDeadline(kind){
+ let saved=0;try{saved=Number(sessionStorage.getItem('wc-auth-'+kind))||0;}catch{}
+ return Math.max(authTimes[kind]||0,Math.min(saved,Date.now()+300000));
+}
+function authDelay(kind,ms){
+ authTimes[kind]=Date.now()+ms;
+ try{sessionStorage.setItem('wc-auth-'+kind,String(authTimes[kind]));}catch{}
+}
+async function guardedAuth(kind,fn){
+ if(authBusy||Date.now()<authDeadline(kind))throw authWait();
+ authBusy=true;
+ const buttons=[$('login'),$('register'),forgot];
+ for(const b of buttons)b.disabled=true;
+ try{await fn();}finally{authBusy=false;for(const b of buttons)b.disabled=false;}
+}
+function validAuthEmail(){
+ const e=$('email');if(!e.value.trim()||!e.validity.valid)throw Error(tr('Saisissez votre adresse email.'));
+ return e.value.trim();
+}
+function authErrorMessage(error){
+ if(error?.status===429)return tr('Trop de demandes. Réessayez plus tard.');
+ if(error?.status>=500)return authTr('Service de connexion indisponible.','Authentication service unavailable.');
+ return authTr('Impossible de poursuivre. Vérifie tes informations ou réessaie plus tard.','Unable to continue. Check your details or try again later.');
+}
 $('register').onclick = () => act(async () => {
-  if (!$('wc-beta-rules')?.checked) throw Error(wcLang==='en'?'Please read and acknowledge the draft beta rules.':'Veuillez lire et reconnaître les règles provisoires de la bêta.');
-  if (!$('adult').checked)
-    throw Error(tr('Vous devez avoir 18 ans ou plus.'));
-
-  if (!$('email').value ||
-      !$('email').validity.valid ||
-      $('password').value.length < 12)
-    throw Error(tr('Email valide et 12 caractères minimum requis.'));
-
-  const { error } = await db.auth.signUp({
-    email: $('email').value.trim(),
-    password: $('password').value,
-    options: {
-      emailRedirectTo: site,
-      data: { adult_declared: true }
-    }
-  });
-
-  check(error);
-  $('password').value = '';
-  status(tr('Vérifiez votre boîte mail.'));
+ if(!$('wc-beta-rules')?.checked)throw Error(authTr('Veuillez lire et reconnaître les règles provisoires de la bêta.','Please read and acknowledge the draft beta rules.'));
+ if(!$('adult').checked)throw Error(tr('Vous devez avoir 18 ans ou plus.'));
+ const email=validAuthEmail(),password=$('password').value;
+ if(password.length<12)throw Error(tr('Email valide et 12 caractères minimum requis.'));
+ await guardedAuth('register',async()=>{
+ authDelay('register',60000);
+ const {error}=await db.auth.signUp({email,password,options:{emailRedirectTo:site,data:{adult_declared:true}}});
+ $('password').value='';
+ if(error)throw Error(authErrorMessage(error));
+ status(tr('Vérifiez votre boîte mail.'));
+ });
 });
-
-$('login').onclick = () => act(async () => {
-  const { error } = await db.auth.signInWithPassword({
-    email: $('email').value.trim(),
-    password: $('password').value
-  });
-
-  check(error);
-  $('password').value = '';
-  status(tr('Connexion réussie.'));
+$('login').onclick=()=>act(async()=>{
+ const email=validAuthEmail(),password=$('password').value;
+ if(!password)throw Error(authTr('Saisis ton mot de passe.','Enter your password.'));
+ await guardedAuth('login',async()=>{
+ authDelay('login',2000);
+ const {error}=await db.auth.signInWithPassword({email,password});
+ $('password').value='';
+ if(error){
+ failedLogins++;
+ authDelay('login',error.status===429?60000:Math.min(30000,2000*2**Math.min(failedLogins,4)));
+ throw Error(authErrorMessage(error));
+ }
+ failedLogins=0;authDelay('login',0);
+ status(tr('Connexion réussie.'));
+ });
 });
-
-const forgot = document.createElement('button');
-forgot.type='button'; forgot.textContent=tr('Mot de passe oublié');
+const forgot=document.createElement('button');
+forgot.type='button';forgot.textContent=tr('Mot de passe oublié');
 $('login').after(forgot);
 forgot.onclick=()=>act(async()=>{
- const email=$('email').value.trim();
- if(!email||!$('email').validity.valid)throw Error(tr('Saisissez votre adresse email.'));
- forgot.disabled=true;
- try {
+ const email=validAuthEmail();
+ await guardedAuth('recovery',async()=>{
+ authDelay('recovery',60000);
  const {error}=await db.auth.resetPasswordForEmail(email,{redirectTo:site});
- if(error&&error.status===429)throw Error(tr('Trop de demandes. Réessayez plus tard.'));
- if(error&&error.status>=500)throw Error(tr('Service email indisponible.'));
+ if(error?.status===429||error?.status>=500)throw Error(authErrorMessage(error));
  status(tr('Si votre compte existe, vous recevrez un lien de réinitialisation.'));
- } finally {forgot.disabled=false;}
+ });
 });
 function showRecovery(){
  const auth=$('auth'), app=$('app');
@@ -112,7 +134,37 @@ function showRecovery(){
  form.onsubmit=e=>{e.preventDefault();void act(async()=>{
  if(p.value.length<12||p.value!==q.value)throw Error(tr('Les mots de passe doivent correspondre et contenir 12 caractères minimum.'));
  save.disabled=true;
- try{check((await db.auth.updateUser({password:p.value})).error);p.value=q.value='';check((await db.auth.signOut()).error);recovering=false;form.remove();auth.hidden=false;status(tr('Mot de passe modifié. Reconnectez-vous.'));}finally{save.disabled=false;}
+ try{
+ const initial=await db.auth.getUser();check(initial.error);const recoveryUid=initial.data.user?.id;
+ if(!recovering||!recoveryUid||!form.isConnected)throw Error(authTr('Lien de récupération invalide.','Invalid recovery link.'));
+ const factors=await db.auth.mfa.listFactors();check(factors.error);
+ const verified=(factors.data.totp||[]).filter(x=>x.status==='verified');
+ const aal=await db.auth.mfa.getAuthenticatorAssuranceLevel();check(aal.error);
+ if(aal.data.nextLevel==='aal2'&&aal.data.currentLevel!=='aal2'){
+ if(!verified.length)throw Error(authTr('Second facteur indisponible. Contacte le support.','Second factor unavailable. Contact support.'));
+ let chosen=verified[0];
+ if(verified.length>1){
+ const selection=prompt(authTr('Choisis ton appareil : ','Choose your device: ')+verified.map((x,i)=>(i+1)+'. '+(x.friendly_name||'Authenticator')).join(' / '));
+ if(selection===null)return;
+ const ix=Number(selection)-1;if(!Number.isInteger(ix)||!verified[ix])throw Error(authTr('Appareil invalide.','Invalid device.'));
+ chosen=verified[ix];
+ }
+ const code=prompt(authTr('Code Authenticator à six chiffres :','Six-digit authenticator code:'));
+ if(code===null)return;
+ if(!/^\d{6}$/.test(code.trim()))throw Error(authTr('Code invalide.','Invalid code.'));
+ const ch=await db.auth.mfa.challenge({factorId:chosen.id});check(ch.error);
+ const v=await db.auth.mfa.verify({factorId:chosen.id,challengeId:ch.data.id,code:code.trim()});
+ if(v.error)throw Error(authTr('Code refusé. Réessaie avec un nouveau code.','Code rejected. Try a new code.'));
+ }
+ const now=await db.auth.getUser();check(now.error);
+ if(now.data.user?.id!==recoveryUid||!recovering||!form.isConnected)throw Error(authTr('Session expirée.','Session expired.'));
+ const finalAal=await db.auth.mfa.getAuthenticatorAssuranceLevel();check(finalAal.error);
+ if(finalAal.data.nextLevel==='aal2'&&finalAal.data.currentLevel!=='aal2')throw Error(authTr('Second facteur requis.','Second factor required.'));
+ const changed=await db.auth.updateUser({password:p.value});if(changed.error)throw Error(authErrorMessage(changed.error));
+ p.value=q.value='';
+ check((await db.auth.signOut({scope:'global'})).error);
+ recovering=false;form.remove();auth.hidden=false;status(tr('Mot de passe modifié. Reconnectez-vous.'));
+ }finally{save.disabled=false;}
  });};
 }
 
