@@ -26,6 +26,100 @@ const status = m => $('status').textContent = m;
 let user = null, revision = 0;
 let recovering = false;
 
+// V18.14 — application-level idle protection; the database is the authority.
+// No activity renewal from polling, refresh tokens, or presence heartbeats.
+let wcIdleState=null,wcIdleBlockedSid=null;
+function wcIdleSid(session){
+ try{
+  const part=session?.access_token?.split('.')[1];
+  if(!part)return null;
+  const base=part.replace(/-/g,'+').replace(/_/g,'/');
+  const id=JSON.parse(atob(base.padEnd(Math.ceil(base.length/4)*4,'='))).session_id;
+  return typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id)?id:null;
+ }catch{return null;}
+}
+function wcIdleLock(state){
+ if(wcIdleState!==state)return;
+ wcIdleBlockedSid=state.sid;wcIdleState=null;
+ user=null;revision++;adminButton.hidden=true;
+ $('view').replaceChildren();$('app').hidden=true;$('auth').hidden=true;
+ status(authTr('Session inactive. Reconnectez-vous.','Inactive session. Sign in again.'));
+ // Local device only; never revoke other devices.
+ void db.auth.signOut({scope:'local'}).catch(()=>{}).finally(()=>{
+  if(!user&&!recovering)$('auth').hidden=false;
+ });
+}
+async function wcIdlePoll(touch=false){
+ const state=wcIdleState;
+ if(!state||recovering||user?.id!==state.uid)return false;
+ if(state.pending)return state.pending;
+ if(touch&&state.ready&&Date.now()>=state.deadline)touch=false;
+ if(navigator.onLine===false){
+  if(state.ready&&Date.now()>=state.deadline)wcIdleLock(state);
+  return false;
+ }
+ const sent=Date.now();
+ state.pending=(async()=>{
+  try{
+   const r=await db.rpc('wc_idle_session',{p_touch:touch===true});
+   if(wcIdleState!==state||user?.id!==state.uid||recovering)return false;
+   if(r.error)throw r.error;
+   if(r.data?.active===false){wcIdleLock(state);return false;}
+   if(r.data?.active!==true)throw Error('Unexpected idle status');
+   const remaining=Date.parse(r.data.expires_at)-Date.parse(r.data.server_time);
+   if(!Number.isFinite(remaining)||remaining<=0||remaining>3600000)throw Error('Invalid idle deadline');
+   state.deadline=sent+remaining;
+   if(Date.now()>=state.deadline){wcIdleLock(state);return false;}
+   state.ready=true;$('app').hidden=false;$('auth').hidden=true;
+   const start=state.start;state.start=null;
+   if(start)setTimeout(()=>{if(wcIdleState===state&&state.ready)void act(start);},0);
+   return true;
+  }catch{
+   if(wcIdleState===state){
+    if(state.ready&&Date.now()>=state.deadline)wcIdleLock(state);
+    else if(!state.ready)status(authTr('Vérification de session indisponible. Nouvelle tentative automatique.','Session check unavailable. Retrying automatically.'));
+   }
+   return false;
+  }finally{state.pending=null;}
+ })();
+ return state.pending;
+}
+function wcIdleAuth(session){
+ if(!session){wcIdleState=null;return false;}
+ const sid=wcIdleSid(session);
+ if(!sid||sid===wcIdleBlockedSid){
+  wcIdleState=null;user=null;revision++;
+  $('view').replaceChildren();$('app').hidden=true;$('auth').hidden=false;
+  status(authTr('Session invalide ou expirée. Reconnectez-vous.','Invalid or expired session. Sign in again.'));
+  return false;
+ }
+ if(wcIdleState?.sid!==sid){
+  wcIdleState={sid,uid:session.user.id,ready:false,deadline:0,pending:null,start:null,lastTouch:0};
+  wcIdleBlockedSid=null;
+  setTimeout(()=>void wcIdlePoll(false),0);
+ }
+ return wcIdleState.ready;
+}
+function wcIdleStart(fn){
+ const state=wcIdleState;
+ if(!state)return;
+ if(state.ready)setTimeout(()=>{if(wcIdleState===state&&state.ready)void act(fn);},0);
+ else state.start=fn;
+}
+function wcIdleActivity(e){
+ const state=wcIdleState;
+ if(!e.isTrusted||document.hidden||!state?.ready||recovering||state.pending)return;
+ if(Date.now()>=state.deadline){void wcIdlePoll(false);return;}
+ if(Date.now()-state.lastTouch<15000)return;
+ state.lastTouch=Date.now();void wcIdlePoll(true);
+}
+for(const type of ['pointerdown','keydown','input','wheel','touchstart']){
+ document.addEventListener(type,wcIdleActivity,{capture:true,passive:true});
+}
+setInterval(()=>{if(wcIdleState)void wcIdlePoll(false);},10000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&wcIdleState)void wcIdlePoll(false);});
+window.addEventListener('online',()=>{if(wcIdleState)void wcIdlePoll(false);});
+
 function check(e) {
   if (e) throw e;
 }
@@ -1668,20 +1762,21 @@ if ('serviceWorker' in navigator) {
 
 db.auth.onAuthStateChange((event, session) => {
   if(event==='PASSWORD_RECOVERY') recovering=true;
-  if(recovering){user=null;revision++;if(session)showRecovery();return;}
+  if(recovering){wcIdleState=null;user=null;revision++;if(session)showRecovery();return;}
   const previous = user?.id;
   user = session?.user || null;
+  const idleReady=wcIdleAuth(session);
   adminButton.hidden = true;
   if (previous !== user?.id) { notificationButton.textContent = tr('🔔 Notifications'); searchFilters = defaultFilters(); nearbyMode=false; nearbyRadius=50; }
   setTimeout(refreshNotificationCount, 0);
   setTimeout(() => act(syncAdmin), 0);
 
   $('auth').hidden = !!user;
-  $('app').hidden = !user;
+  $('app').hidden = !user || !idleReady;
 
   if (user) {
-    if (previous !== user.id || event === 'INITIAL_SESSION') {
-      setTimeout(() => act(async () => {
+    if (previous !== user.id || event === 'INITIAL_SESSION' || (!idleReady&&wcIdleState&&!wcIdleState.start)) {
+      wcIdleStart(async () => {
         const enteringUid=user?.id;if(!enteringUid)return;
         const appealAccess=await db.rpc('wc_my_appeals');
         if(user?.id!==enteringUid)return;
@@ -1708,7 +1803,7 @@ db.auth.onAuthStateChange((event, session) => {
         } else {
           await profile();
         }
-      }), 0);
+      });
     }
   } else {
     revision++;
