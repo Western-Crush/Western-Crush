@@ -174,7 +174,7 @@ async function profile() {
 
   const { data, error } = await db
     .from('profiles')
-    .select('pseudo,bio,age,city,department,gender,looking_for,interests,western_style,relationship_goal,photo_url,discoverable')
+    .select('pseudo,bio,age,city,department,gender,looking_for,interests,western_style,relationship_goal,photo_url,discoverable,country_code,preferred_language,distance_unit')
     .eq('id', uid)
     .maybeSingle();
 
@@ -206,11 +206,21 @@ async function profile() {
   const form = element('form');
   const fields = {};
 
+  for(const [key,label,options,fallback] of [
+    ['country_code','Pays / Country',[['FR','France'],['US','United States']], 'FR'],
+    ['preferred_language','Langue préférée / Preferred language',[['fr','Français'],['en','English']], 'fr'],
+    ['distance_unit','Unité de distance / Distance unit',[['km','Kilomètres'],['mi','Miles']], 'km']
+  ]){
+    const l=element('label',label), f=element('select');
+    for(const [value,name] of options) f.append(new Option(name,value));
+    f.value=data?.[key] || fallback; fields[key]=f; l.append(f); form.append(l);
+  }
+  form.append(element('small','États-Unis : saisissez votre ville et votre État dans les champs suivants. La localisation automatique est actuellement réservée à la France.'));
   for (const [key, label, max] of [
     ['pseudo', 'Pseudo', 60],
     ['age', 'Âge (18 ans minimum)', 3],
     ['city', 'Ville', 100],
-    ['department', 'Département', 100],
+    ['department', 'Département / État (State)', 100],
     ['gender', 'Genre', 80],
     ['looking_for', 'Personne recherchée', 100],
     ['interests', 'Centres d’intérêt (séparés par des virgules)', 500],
@@ -778,12 +788,12 @@ async function memberPhoto(card, target, uid, rev) {
 }
 
 // Filtres propres à la session, sans stockage persistant.
-const defaultFilters = () => ({min_age:18,max_age:90,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false,radius_km:null,sort_by:'distance'});
+const defaultFilters = () => ({wanted_country:'',min_age:18,max_age:90,wanted_gender:'',wanted_city:'',wanted_department:'',with_photo:false,radius_km:null,sort_by:'distance'});
 let searchFilters = defaultFilters();
 let nearbyMode = false, nearbyRadius = 50;
 function locationForm(uid, rev) {
   const form = element('form');
-  form.append(element('h2', '📍 Ma commune'), element('p', 'Choisissez votre commune pour activer la recherche à proximité. Seul le centre de la commune est enregistré, sans GPS.'));
+  form.append(element('h2', '📍 Ma commune (France uniquement)'), element('p', 'Choisissez votre commune pour activer la recherche à proximité. Seul le centre de la commune est enregistré, sans GPS.'));
   const input = element('input'); input.placeholder = 'Ville ou code postal'; input.required = true; input.minLength = 2; input.maxLength = 100;
   const go = element('button', 'Chercher une commune'); go.type = 'submit';
   const results = element('div'); form.append(input, go, results);
@@ -816,7 +826,8 @@ function searchForm(paid) {
     const f=field(k,label);f.type='number';f.min=18;f.max=90;f.required=true;f.defaultValue=String(searchFilters[k] ?? defaultFilters()[k]);f.value=f.defaultValue;
   }
   field('wanted_gender','Genre',[['','Tout le monde'],['femme','Femme'],['homme','Homme'],['autre','Autre']]);
-  const city=field('wanted_city','Ville');city.maxLength=100;
+  field('wanted_country','Pays / Country',[['','Tous les pays'],['FR','France'],['US','United States']]);
+  const city=field('wanted_city','Ville / City');city.maxLength=100;
   const lookup=element('input');lookup.placeholder='Ville ou code postal';lookup.maxLength=100;
   const choices=element('div');let request=0;const uid=user?.id,rev=revision;
   form.append(lookup,actionButton('Trouver une commune',async()=>{
@@ -828,16 +839,16 @@ function searchForm(paid) {
     if(!r.data?.length)choices.textContent='Aucune commune trouvée.';
     for(const c of r.data||[])choices.append(actionButton(c.nom+' ('+c.code_postal+')',async()=>{
       if(user?.id!==uid||revision!==rev||n!==request)return;
-      city.value=c.nom;const code=String(c.code_insee);fields.wanted_department.value=code.startsWith('97')||code.startsWith('98')?code.slice(0,3):code.slice(0,2);choices.replaceChildren();
+      fields.wanted_country.value='FR';city.value=c.nom;const code=String(c.code_insee);fields.wanted_department.value=code.startsWith('97')||code.startsWith('98')?code.slice(0,3):code.slice(0,2);choices.replaceChildren();
     }));
   }),choices);
-  const dep=field('wanted_department','Département (code)');dep.maxLength=100;
-  field('radius_km','Rayon autour de ma commune',[['','Toute la France'],...Array.from({length:20},(_,i)=>[String((i+1)*10),((i+1)*10)+' km'])]);
+  const dep=field('wanted_department','Département / État (State)');dep.maxLength=100;
+  field('radius_km','Rayon autour de ma commune',[['','Tous les pays'],...Array.from({length:20},(_,i)=>[String((i+1)*10),((i+1)*10)+' km'])]);
   field('sort_by','Trier par',[['distance','Du plus proche au plus éloigné'],['newest','Nouveaux membres']]);
   const photo=field('with_photo','Uniquement avec photo');photo.type='checkbox';photo.checked=searchFilters.with_photo;
   if(!paid){fields.radius_km.value='';fields.sort_by.value='newest';photo.checked=false;for(const f of [fields.radius_km,fields.sort_by,photo])f.disabled=true;form.append(element('p','🔒 Filtres avancés réservés aux abonnés Cowboy et Shérif VIP.'),actionButton('Voir les abonnements',premium));}
   const go=element('button','Rechercher');go.type='submit';form.append(go,actionButton('Réinitialiser',async()=>{searchFilters=defaultFilters();status('');await discover();}),actionButton('Choisir ma commune',profile),element('small','Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.'));
-  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>90||min>max){status('Tranche d’âge invalide.');return;}searchFilters={min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};status('');void act(discover);};
+  form.onsubmit=e=>{e.preventDefault();const min=Number(fields.min_age.value),max=Number(fields.max_age.value);if(!Number.isInteger(min)||!Number.isInteger(max)||min<18||max>90||min>max){status('Tranche d’âge invalide.');return;}searchFilters={wanted_country:fields.wanted_country.value,min_age:min,max_age:max,wanted_gender:fields.wanted_gender.value,wanted_city:city.value.trim(),wanted_department:dep.value.trim(),with_photo:photo.checked,radius_km:fields.radius_km.value?Number(fields.radius_km.value):null,sort_by:fields.sort_by.value};status('');void act(discover);};
   return form;
 }
 
@@ -856,7 +867,7 @@ async function discover() {
   if(user?.id!==uid || rev!==revision)return;
   const paid = !membership.error && ['cowboy','vip'].includes(membership.data);
   if(!paid)searchFilters={...searchFilters,radius_km:null,with_photo:false,sort_by:'newest'};
-  const { data, error } = await db.rpc('search_members_advanced', searchFilters);
+  const { data, error } = await db.rpc('search_members_international', searchFilters);
   if (user?.id !== uid || rev !== revision) return;
   if (error) {
     view.textContent = 'Impossible de charger les membres.';
@@ -897,7 +908,7 @@ async function discover() {
     const card = element('article'); card.className = 'wc-profile-card';
     card.append(
       element('h2', `${member.pseudo || 'Membre'} — ${member.age} ans`),
-      element('p', [member.city, member.department].filter(Boolean).join(' · ')),
+      element('p', [member.city, member.department, member.country_code === 'US' ? 'United States' : 'France'].filter(Boolean).join(' · ')),
       element('p', member.bio || 'Aucune présentation.')
     );
     if (Number.isFinite(member.distance)) card.append(element('p', member.distance === 0 ? 'À moins de 5 km environ' : 'À environ ' + member.distance + ' km'));
