@@ -8,6 +8,7 @@ const db = createClient(
 
 
 const WC_I18N={"Connexion requise":"Sign in required","Photo refusée":"Photo rejected","Une erreur est survenue.":"Something went wrong.","Vous devez avoir 18 ans ou plus.":"You must be 18 or older.","Email valide et 12 caractères minimum requis.":"A valid email and at least 12 password characters are required.","Vérifiez votre boîte mail.":"Check your inbox.","Connexion réussie.":"Signed in successfully.","Mot de passe oublié":"Forgot password","Saisissez votre adresse email.":"Enter your email address.","Trop de demandes. Réessayez plus tard.":"Too many requests. Try again later.","Service email indisponible.":"Email service unavailable.","Si votre compte existe, vous recevrez un lien de réinitialisation.":"If your account exists, you will receive a reset link.","Nouveau mot de passe":"New password","12 caractères minimum":"At least 12 characters","Confirmez le mot de passe":"Confirm password","Enregistrer le nouveau mot de passe":"Save new password","Annuler":"Cancel","Les mots de passe doivent correspondre et contenir 12 caractères minimum.":"Passwords must match and contain at least 12 characters.","Mot de passe modifié. Reconnectez-vous.":"Password changed. Sign in again.","Déconnexion réussie.":"Signed out successfully.","⭐ Shérif VIP — Abonnement actif":"⭐ Sheriff VIP — Active subscription","🤠 Cowboy Premium — Abonnement actif":"🤠 Cowboy Premium — Active subscription","Membre gratuit":"Free member","Mon profil privé":"My private profile","Statut abonnement indisponible.":"Subscription status unavailable.","Chargement…":"Loading…","Pseudo":"Nickname","Âge (18 ans minimum)":"Age (18 or older)","Ville":"City","Département / État (State)":"Department / State","Genre":"Gender","Personne recherchée":"Looking for","Centres d’intérêt (séparés par des virgules)":"Interests (comma separated)","Style Country et Western":"Country and Western style","Relation recherchée":"Relationship goal","Présentation":"About me","Non renseigné":"Not specified","Choisir vos passions (ou compléter le texte)":"Choose your interests (or add your own)"," Rendre mon profil visible dans Découvrir":" Make my profile visible in Discover","Si vous activez cette option, votre pseudo, âge, ville, département et présentation seront visibles par les membres autorisés. Votre photo peut être consultée par les membres autorisés si votre profil est visible.":"If enabled, authorized members can see your nickname, age, city, region, bio and profile photo.","⭐ Mode invisible — Shérif VIP":"⭐ Invisible mode — Sheriff VIP","Masquez votre profil dans Découvrir et les recherches. Vos matchs existants restent accessibles. Ce réglage est indépendant de la visibilité classique.":"Hide your profile from Discover and search. Existing matches remain accessible. This setting is separate from standard visibility.","Vérification du statut…":"Checking status…","Voir les abonnements":"View plans","Actualiser le statut":"Refresh status","Fonctionnalité réservée aux abonnés Shérif VIP.":"Available to Sheriff VIP members only.","🔒 Mode invisible":"🔒 Invisible mode","Enregistrez votre profil avant d’activer le mode invisible.":"Save your profile before enabling invisible mode.","Mode invisible":"Invisible mode","Désactiver le mode invisible":"Disable invisible mode","Activer le mode invisible":"Enable invisible mode","Activé — votre profil est masqué dans les recherches.":"Enabled — your profile is hidden from search.","Désactivé — votre visibilité classique s’applique.":"Disabled — standard visibility applies.","Statut indisponible. Réessayez pour vérifier votre réglage.":"Status unavailable. Try again.","Réponse inattendue":"Unexpected response","Modification non confirmée. Vérifiez le statut du mode invisible ou réessayez.":"Change not confirmed. Check invisible mode status or try again.","Le masquage VIP prend fin lorsque votre abonnement VIP expire.":"VIP hiding ends when your VIP subscription expires.","Enregistrer mon profil":"Save my profile","Session expirée.":"Session expired.","Pseudo et âge valide obligatoires.":"A nickname and valid age are required.","Profil enregistré.":"Profile saved.","Ma photo de profil":"My profile photo","Ajouter / remplacer la photo":"Add / replace photo","Supprimer la photo":"Delete photo","Choisissez une image JPEG, PNG ou WebP de 5 Mo maximum.":"Choose a JPEG, PNG or WebP image up to 5 MB.","Photo enregistrée.":"Photo saved.","Photo supprimée.":"Photo deleted.","Chargement des abonnements…":"Loading subscriptions…","Impossible de vérifier votre abonnement.":"Unable to verify your subscription.","Abonnements en mode test.":"Subscriptions in test mode.","Mon abonnement":"My subscription","Fin de période actuelle : ":"Current period ends: ","⭐ Shérif VIP":"⭐ Sheriff VIP","📅 Résiliation programmée":"📅 Cancellation scheduled","Fin de votre abonnement : ":"Subscription ends: ","📅 Changement d’abonnement programmé":"📅 Plan change scheduled","Prochaine formule : ":"Next plan: ","Prochain tarif : ":"Next price: ","Vous conservez vos avantages actuels jusqu’au changement de formule.":"Your current benefits remain until the plan changes.","Abonnement en attente ou à vérifier.":"Subscription pending or needs verification.","Vous utilisez actuellement la formule gratuite.":"You are currently on the free plan.","⚙️ Gérer mon abonnement":"⚙️ Manage my subscription","Ouverture du portail Stripe…":"Opening Stripe portal…","Reconnectez-vous pour gérer votre abonnement.":"Sign in again to manage your subscription.","Impossible d’ouvrir le portail Stripe.":"Unable to open Stripe portal.","Portail Stripe indisponible.":"Stripe portal unavailable.","Adresse du portail invalide.":"Invalid portal URL.","✓ Abonnement actif":"✓ Active subscription","📅 Changement programmé":"📅 Change scheduled","Abonnement déjà enregistré":"Subscription already registered","Ouverture du paiement Stripe…":"Opening Stripe checkout…","Paiement indisponible.":"Payment unavailable.","Adresse de paiement invalide.":"Invalid checkout URL.","Actualiser mon abonnement":"Refresh my subscription","🔒 Paiement sécurisé par Stripe — Mode test.":"🔒 Secure Stripe payment — Test mode.","🤠 Aucune photo disponible":"🤠 No photo available","Photo de profil du membre":"Member profile photo","📍 Ma commune (France uniquement)":"📍 My city (France only)","Choisissez votre commune pour activer la recherche à proximité. Seul le centre de la commune est enregistré, sans GPS.":"Choose your city to enable nearby search. Only the city center is stored, without GPS.","Ville ou code postal":"City or postal code","Chercher une commune":"Find a city","Aucune commune trouvée.":"No city found.","Enregistrer cette commune sur votre profil ?":"Save this city to your profile?","Commune enregistrée.":"City saved.","🔎 Recherche avancée":"🔎 Advanced search","Âge minimum":"Minimum age","Âge maximum":"Maximum age","Tout le monde":"Everyone","Femme":"Woman","Homme":"Man","Autre":"Other","Tous les pays":"All countries","Trouver une commune":"Find a city","Saisissez au moins deux caractères pour trouver une commune.":"Enter at least two characters to find a city.","Recherche de commune indisponible.":"City search unavailable.","Rayon autour de ma commune":"Radius around my city","Trier par":"Sort by","Du plus proche au plus éloigné":"Nearest first","Nouveaux membres":"Newest members","Uniquement avec photo":"With photo only","🔒 Filtres avancés réservés aux abonnés Cowboy et Shérif VIP.":"🔒 Advanced filters require Cowboy or Sheriff VIP.","Réinitialiser":"Reset","Choisir ma commune":"Choose my city","Tranche d’âge invalide.":"Invalid age range.","Chargement des membres…":"Loading members…","Impossible de charger les membres.":"Unable to load members.","🔎 Filtres de recherche":"🔎 Search filters","🤠 Découvrir les membres":"🤠 Discover members","Chargement des likes…":"Loading likes…","Compteur indisponible":"Counter unavailable","★ Likes illimités Premium":"★ Unlimited Premium likes","♥ Qui m’aime ?":"♥ Who likes me?","Actualiser les profils":"Refresh profiles","Modifier ma visibilité":"Change my visibility","💘 Mes matchs":"💘 My matches","🚫 Mes blocages":"🚫 Blocked members","Aucun membre localisé dans ce rayon. Vérifiez votre commune et élargissez le rayon.":"No members found within this radius. Check your city and increase the radius.","Aucun profil correspondant. Modifiez les filtres.":"No matching profiles. Change the filters.","Vous avez parcouru tous les profils.":"You have viewed all profiles.","Revoir les profils":"Review profiles","Aucune présentation.":"No bio.","Retirer mon J’aime":"Unlike","J’aime actualisé.":"Like updated.","Voir le profil détaillé":"View full profile","Bloquer ce membre ?":"Block this member?","Le signalement est transmis à la modération, pas au membre signalé.":"Reports go to moderators, not to the reported member.","Motif du signalement":"Report reason","Choisir un motif":"Choose a reason","Informations complémentaires (facultatif)":"Additional details (optional)","Envoyer le signalement":"Submit report","Signalement envoyé":"Report sent","Merci. Votre signalement a été transmis à la modération.":"Thank you. Your report has been sent to moderation.","Signalement enregistré.":"Report saved.","Chargement des matchs…":"Loading matches…","Découvrir":"Discover","Aucun match pour le moment.":"No matches yet.","Membre compatible":"Compatible member","Présence inconnue":"Presence unknown","Chargement du dernier message…":"Loading latest message…","💬 Envoyer un message":"💬 Send a message","Aperçu indisponible":"Preview unavailable","Aucun message":"No messages","Chargement de la conversation…":"Loading conversation…","Connexion au temps réel…":"Connecting to live chat…"," est en train d’écrire…":" is typing…","Votre message":"Your message","● Messagerie en temps réel":"● Live messaging","Actualisation de secours toutes les 3 secondes":"Fallback refresh every 3 seconds","Aucun message. Lancez la conversation !":"No messages. Start the conversation!"," · ✓ Envoyé":" · ✓ Sent"," · ✓✓ Lu":" · ✓✓ Read","Actualisation impossible. Nouvelle tentative automatique.":"Unable to refresh. Retrying automatically.","Retour aux matchs":"Back to matches","🚩 Signaler ce membre":"🚩 Report this member","Membres bloqués":"Blocked members","Aucun membre bloqué.":"No blocked members.","Débloquer":"Unblock","Accès administrateur refusé.":"Administrator access denied.","Motif obligatoire":"Reason required","Motif de suspension":"Suspension reason","Vérification des droits administrateur…":"Checking administrator permissions…","Gestion des membres":"Manage members","Ville non renseignée":"City not specified","Votre compte administrateur":"Your administrator account","Non suspendu":"Not suspended","Suspension annulée.":"Suspension cancelled.","Compte suspendu.":"Account suspended.","✓ Profil vérifié":"✓ Verified profile","Profil non vérifié":"Unverified profile","Retirer la certification":"Remove verification","Certifier le profil":"Verify profile","Retirer le badge ?":"Remove badge?","Confirmer que ce profil a été contrôlé ?":"Confirm this profile was checked?","Action annulée.":"Action cancelled.","Certification retirée.":"Verification removed.","Profil certifié.":"Profile verified.","Comptes suspendus":"Suspended accounts","Aucun compte suspendu.":"No suspended accounts.","Réactiver":"Reactivate","Réactivation annulée.":"Reactivation cancelled.","Aucune suspension supprimée.":"No suspension removed.","Compte réactivé avec succès.":"Account reactivated successfully.","Aucun signalement.":"No reports.","Traité":"Reviewed","À traiter":"Pending review","Marquer comme traité":"Mark reviewed","Signalement non modifié.":"Report unchanged.","Aucun abonnement.":"No subscriptions.","Administration indisponible.":"Administration unavailable.","Chargement des notifications…":"Loading notifications…","Notifications indisponibles.":"Notifications unavailable.","🔔 Mes notifications":"🔔 My notifications","Tout marquer comme lu":"Mark all as read","❤️ Un membre apprécie votre profil.":"❤️ A member likes your profile.","💘 Vous avez un nouveau match !":"💘 You have a new match!","💬 Vous avez reçu un message.":"💬 You received a message.","Aucune notification pour le moment.":"No notifications yet.","Nouvelle notification":"New notification","Marquer comme lue":"Mark as read","Voir mes likes reçus":"View received likes","Découvrir avec Premium":"Discover with Premium","Ouvrir mes matchs":"Open my matches","Fonctionnalité en préparation.":"Feature in development.","Retour du paiement. Actualisez votre abonnement si nécessaire.":"Returned from checkout. Refresh your subscription if needed.","Paiement annulé.":"Payment cancelled.","Présence indisponible":"Presence unavailable","● En ligne":"● Online","● Hors ligne":"● Offline","★ SHÉRIF VIP":"★ SHERIFF VIP"," ✓ Vérifié par la modération":" ✓ Verified by moderation","Ma galerie (6 photos supplémentaires)":"My gallery (6 extra photos)","Galerie privée":"Private gallery","Visible par vos matchs autorisés. JPEG, PNG ou WebP, 5 Mo maximum.":"Visible to authorized matches. JPEG, PNG or WebP, up to 5 MB.","Photos accessibles uniquement aux matchs autorisés.":"Photos accessible only to authorized matches.","Agrandir la photo ":"Enlarge photo ","Photo indisponible":"Photo unavailable","Vérification de la session…":"Checking session…","Suppression de la photo : vérification…":"Deleting photo: checking…","Session ou galerie inactive. Ouvrez de nouveau votre profil.":"Session or gallery inactive. Open your profile again.","Confirmer la suppression":"Confirm deletion","Supprimer cette photo ?":"Delete this photo?","Cette photo sera définitivement supprimée de votre galerie.":"This photo will be permanently deleted from your gallery.","Suppression annulée.":"Deletion cancelled.","Session expirée ou profil fermé. Reconnectez-vous.":"Session expired or profile closed. Sign in again.","Suppression du fichier…":"Deleting file…","Photo supprimée avec succès.":"Photo deleted successfully.","Échec de la suppression.":"Deletion failed.","Aucune photo supplémentaire accessible.":"No additional photos available.","Chargement du profil…":"Loading profile…","Profil détaillé indisponible selon les autorisations.":"Full profile unavailable due to permissions."," % de compatibilité":"% compatibility","Score indicatif fondé sur les préférences déclarées.":"Indicative score based on stated preferences.","Compatibilité non calculée : préférences incomplètes ou score indisponible.":"Compatibility unavailable: incomplete preferences or score unavailable.","Galerie supplémentaire réservée aux matchs.":"Extra gallery available to matches only.","Découvrez les personnes qui aiment votre profil avec Cowboy ou Shérif VIP.":"See who likes your profile with Cowboy or Sheriff VIP.","Aucun like reçu disponible.":"No received likes available.","Voir le profil":"View profile","Retour":"Back","← Retour":"← Back","Ajouter":"Add","Supprimer":"Delete","Fermer ×":"Close ×","Membre":"Member","Rechercher":"Search","Recherche…":"Searching…","Enregistrement…":"Saving…","Matchs":"Matches","🔔 Notifications":"🔔 Notifications","Déconnexion":"Sign out","Administration":"Admin","Profil":"Profile","Passions":"Interests","Envoyer":"Send","Bloquer":"Block","Signaler":"Report","Passer":"Skip","J’aime":"Like","💘 C’est un match !":"💘 It's a match!","États-Unis : saisissez votre ville et votre État dans les champs suivants. La localisation automatique est actuellement réservée à la France.":"United States: enter your city and state below. Automatic location is currently available in France only.","Le rayon est calculé autour de votre commune enregistrée. Les distances sont approximatives. La recherche par code postal sélectionne la commune, pas un quartier précis.":"The radius uses your saved city. Distances are approximate. Postal code search selects the city, not a specific neighborhood."};
+Object.assign(WC_I18N,{tr("Date : "):"Date: ",tr("9,99 € / mois"):"€9.99 / month",tr("19,99 € / mois"):"€19.99 / month",tr("✕ Passer"):"✕ Skip",tr("🚫 Bloquer"):"🚫 Block",tr("🚩 Signaler"):"🚩 Report",tr("🚩 Signaler "):"🚩 Report ",tr("Envoyer ➤"):"Send ➤",tr("🛡️ Administration"):"🛡️ Admin",tr("Confirmer"):"Confirm",tr("🛡️ Administration Western Crush"):"🛡️ Western Crush administration",tr("Actualiser"):"Refresh",tr("Suspendre"):"Suspend",tr("Signalements"):"Reports",tr("Abonnements — consultation uniquement"):"Subscriptions — read only","Country traditionnel":"Traditional Country","Ranch et équitation":"Ranch and horseback riding","Western et Far West":"Western and Wild West","Tous les styles":"All styles","Relation sérieuse":"Serious relationship","Amitié":"Friendship","Partenaire de danse":"Dance partner","Rencontres":"Dating"});
 let wcLang='fr',wcUnit='km';
 try{wcLang=localStorage.getItem('wc-language')||(navigator.language?.startsWith('en')?'en':'fr');wcUnit=localStorage.getItem('wc-unit')||(wcLang==='en'?'mi':'km');}catch{}
 const tr=s=>wcLang==='en'?(WC_I18N[s]??s):s;
@@ -250,7 +251,7 @@ async function profile() {
       const options = key === 'western_style' ? ['Country traditionnel','Country Line Dance','Ranch et équitation','Country Rock','Western et Far West','Tous les styles'] : ['Relation sérieuse','Amitié','Partenaire de danse','Rencontres'];
       const existing = data?.[key];
       if(existing && !options.includes(existing)) options.push(existing);
-      f.append(new Option(tr('Non renseigné'),''), ...options.map(v=>new Option(v,v)));
+      f.append(new Option(tr('Non renseigné'),''), ...options.map(v=>new Option(tr(v),v)));
     }
     f.value = data?.[key] ?? '';
     f.maxLength = max;
@@ -412,7 +413,9 @@ async function profile() {
 
         check(result.error);
         profileExists = true;
+        const languageChanged=wcLang!==values.preferred_language;
         wcSetPreferences(values.preferred_language,values.distance_unit);
+        if(languageChanged){location.reload();return;}
         if($('wc-language')) $('wc-language').value=wcLang;
         status(tr('Profil enregistré.'));
         if (privacyCurrent() && !privacyBusy) void refreshPrivacy();
@@ -603,8 +606,8 @@ async function premium() {
     );
     const changeAt = new Date(active.next_plan_at || 0);
     const next = {
-      cowboy: { name: '🤠 Cowboy Premium', price: '9,99 € / mois' },
-      vip: { name: tr('⭐ Shérif VIP'), price: '19,99 € / mois' }
+      cowboy: { name: '🤠 Cowboy Premium', price: tr('9,99 € / mois') },
+      vip: { name: tr('⭐ Shérif VIP'), price: tr('19,99 € / mois') }
     }[active.next_plan];
     const notice = element('div');
     notice.style.cssText = 'padding:12px;margin:12px 0;border:1px solid #b98645;border-radius:10px;background:#49321f;color:#f6c479';
@@ -617,7 +620,7 @@ async function premium() {
       notice.append(
         element('strong', tr('📅 Changement d’abonnement programmé')),
         element('p', tr('Prochaine formule : ') + next.name),
-        element('p', 'Date : ' + changeAt.toLocaleDateString(wcLocale(), {day:'numeric',month:'long',year:'numeric'})),
+        element('p', tr('Date : ') + changeAt.toLocaleDateString(wcLocale(), {day:'numeric',month:'long',year:'numeric'})),
         element('p', tr('Prochain tarif : ') + next.price),
         element('p', tr('Vous conservez vos avantages actuels jusqu’au changement de formule.'))
       );
@@ -675,12 +678,12 @@ async function premium() {
     {
       id: 'cowboy',
       name: '🤠 Cowboy Premium',
-      price: '9,99 € / mois'
+      price: tr('9,99 € / mois')
     },
     {
       id: 'vip',
       name: tr('⭐ Shérif VIP'),
-      price: '19,99 € / mois'
+      price: tr('19,99 € / mois')
     }
   ];
 
@@ -891,7 +894,7 @@ async function discover() {
   view.replaceChildren(element('h2', tr('🤠 Découvrir les membres')), filters);
   const quota = element('p',tr('Chargement des likes…'));
   view.prepend(quota);
-  async function refreshQuota(){ const r=await db.rpc('my_remaining_likes'); if(user?.id===uid && revision===rev) quota.textContent=r.error?tr('Compteur indisponible'):r.data===-1?tr('★ Likes illimités Premium'):`${r.data} / 10 likes restants aujourd’hui`; }
+  async function refreshQuota(){ const r=await db.rpc('my_remaining_likes'); if(user?.id===uid && revision===rev) quota.textContent=r.error?tr('Compteur indisponible'):r.data===-1?tr('★ Likes illimités Premium'):`${r.data} / 10 ${wcLang==='en'?'likes left today':'likes restants aujourd’hui'}`; }
   void refreshQuota();
   view.append(actionButton(tr('♥ Qui m’aime ?'), receivedLikes));
   const refresh = element('button', tr('Actualiser les profils'));
@@ -921,7 +924,7 @@ async function discover() {
     deck.append(element('small', `Profil ${index + 1} sur ${data.length}`));
     const card = element('article'); card.className = 'wc-profile-card';
     card.append(
-      element('h2', `${member.pseudo || tr('Membre')} — ${member.age} ans`),
+      element('h2', `${member.pseudo || tr('Membre')} — ${member.age} ${wcLang==='en'?'years old':'ans'}`),
       element('p', [member.city, member.department, member.country_code === 'US' ? 'United States' : 'France'].filter(Boolean).join(' · ')),
       element('p', member.bio || tr('Aucune présentation.'))
     );
@@ -929,7 +932,7 @@ async function discover() {
     const target = member.id;
     const actions = element('div'); actions.className = 'wc-card-actions';
     let busy = false;
-    actions.append(actionButton('✕ Passer', async () => { if (busy || !card.isConnected || rev !== revision) return; index++; showCard(); }));
+    actions.append(actionButton(tr('✕ Passer'), async () => { if (busy || !card.isConnected || rev !== revision) return; index++; showCard(); }));
     actions.append(actionButton(ownLikes.has(target) ? tr('Retirer mon J’aime') : '❤️ J’aime', async () => {
       if (user?.id !== uid || rev !== revision || !card.isConnected || busy) return;
       busy = true;
@@ -951,12 +954,12 @@ async function discover() {
     card.append(actions, actionButton(tr('Voir le profil détaillé'), () => detailedProfile(target, member.pseudo, discover)));
     void renderBadge(card, target, uid, rev);
     const safety = element('div'); safety.className = 'wc-card-safety';
-    safety.append(actionButton('🚫 Bloquer', async () => {
+    safety.append(actionButton(tr('🚫 Bloquer'), async () => {
       if (user?.id !== uid || !confirm(tr('Bloquer ce membre ?'))) return;
       check((await db.from('blocks').insert({blocker_id: uid, blocked_id: target})).error);
       if (user?.id === uid && rev === revision) await discover();
     }));
-    safety.append(actionButton('🚩 Signaler', () => reportMember(target, member.pseudo || tr('Membre'), discover)));
+    safety.append(actionButton(tr('🚩 Signaler'), () => reportMember(target, member.pseudo || tr('Membre'), discover)));
     card.append(safety);
     deck.append(card);
     let start = null;
@@ -973,7 +976,7 @@ async function discover() {
 async function reportMember(target, name, back) {
   const uid = user?.id, rev = ++revision, view = $('view');
   if (!uid || !target || uid === target) return;
-  view.replaceChildren(element('h2', '🚩 Signaler ' + name));
+  view.replaceChildren(element('h2', tr('🚩 Signaler ') + name));
   view.append(element('p', tr('Le signalement est transmis à la modération, pas au membre signalé.')));
   const form = element('form');
   const label = element('label', tr('Motif du signalement'));
@@ -1016,7 +1019,7 @@ async function matches() {
   const ids = m.data.map(x => x.match_id);
   const d = ids.length ? await db.from('profiles').select('id,pseudo').in('id', ids) : {data:[],error:null};
   if (user?.id !== uid || rev !== revision) return;
-  view.replaceChildren(element('h2', tr('💘 Mes matchs')), actionButton('Actualiser', matches), actionButton(tr('Découvrir'), discover));
+  view.replaceChildren(element('h2', tr('💘 Mes matchs')), actionButton(tr('Actualiser'), matches), actionButton(tr('Découvrir'), discover));
   if (!m.data.length) view.append(element('p', tr('Aucun match pour le moment.')));
   for (const x of m.data) {
     const name = d.data?.find(p => p.id === x.match_id)?.pseudo || tr('Membre compatible');
@@ -1094,7 +1097,7 @@ async function conversation(target, name) {
     } catch(e) { if(current()){ thread.replaceChildren(); last=null; info.textContent = tr('Actualisation impossible. Nouvelle tentative automatique.'); } }
     finally { reading = false; if (pending && current()) { pending = false; queueMicrotask(refresh); } }
   }
-  const send = actionButton('Envoyer ➤', async () => {
+  const send = actionButton(tr('Envoyer ➤'), async () => {
     if (!current() || busy || !input.value.trim()) return;
     busy = true; send.disabled = true;
     const content = input.value.trim(); input.disabled = true;
@@ -1104,7 +1107,7 @@ async function conversation(target, name) {
     } finally { busy=false; send.disabled=false; input.disabled=false; if(current()) input.focus(); }
   });
   const composer = element('div'); composer.className='wc-composer'; composer.append(input,send);
-  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton('Actualiser',refresh),presence,info,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))));
+  view.replaceChildren(element('h2','💬 '+name),actionButton(tr('Retour aux matchs'),matches),actionButton(tr('Actualiser'),refresh),presence,info,thread,typing,composer,actionButton(tr('🚩 Signaler ce membre'),()=>reportMember(target,name,()=>conversation(target,name))));
   const channel = db.channel('wc-chat-' + crypto.randomUUID());
   const onMessage = ({new: row}) => {
     if (!current() || !row) return;
@@ -1155,7 +1158,7 @@ async function blocked() {
 
 
 // ADMINISTRATION : autorisations vérifiées par Supabase (RLS).
-const adminButton = actionButton('🛡️ Administration', administration);
+const adminButton = actionButton(tr('🛡️ Administration'), administration);
 adminButton.hidden = true;
 $('logout').before(adminButton);
 let adminCheck = 0;
@@ -1182,7 +1185,7 @@ async function adminRows(table, columns) {
 function adminConfirmation(message, needsReason=false) {
   return new Promise(resolve=>{
     const dialog=element('dialog'); dialog.className='wc-lightbox';
-    const yes=element('button','Confirmer');yes.type='button';
+    const yes=element('button',tr('Confirmer'));yes.type='button';
     const no=element('button',tr('Annuler'));no.type='button';
     dialog.append(element('h2',message));
     const reason=element('textarea');reason.maxLength=500;reason.placeholder=tr('Motif obligatoire');reason.setAttribute('aria-label',tr('Motif de suspension'));
@@ -1212,14 +1215,14 @@ async function administration() {
     const name = id => names.get(id) || id;
     const suspended = new Map(suspensions.map(x => [x.user_id,x]));
     const active = new Set(subscriptions.filter(x => getActiveSubscription([x])).map(x => x.user_id));
-    view.replaceChildren(element('h2','🛡️ Administration Western Crush'), actionButton('Actualiser', administration));
+    view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
     view.append(stats, element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
-      if (m.id !== uid && !suspended.has(m.id)) card.append(actionButton('Suspendre', async () => {
+      if (m.id !== uid && !suspended.has(m.id)) card.append(actionButton(tr('Suspendre'), async () => {
         if (!current()) return;
         const reason = await adminConfirmation('Suspendre '+name(m.id)+' ?',true);
         if (!reason) {status(tr('Suspension annulée.'));return;}
@@ -1253,7 +1256,7 @@ async function administration() {
         if (current()) await administration();
       })); view.append(card);
     }
-    view.append(element('h2','Signalements'));
+    view.append(element('h2',tr('Signalements')));
     if (!reports.length) view.append(element('p',tr('Aucun signalement.')));
     for (const x of reports) {
       const card = element('article'); card.append(element('p','Membre signalé : '+name(x.reported_id)),element('p','Auteur : '+name(x.reporter_id)),element('p',x.reason),element('p',x.reviewed?tr('Traité'):tr('À traiter')));
@@ -1263,7 +1266,7 @@ async function administration() {
         if (current()) await administration();
       })); view.append(card);
     }
-    view.append(element('h2','Abonnements — consultation uniquement'));
+    view.append(element('h2',tr('Abonnements — consultation uniquement')));
     for (const x of subscriptions) view.append(element('p',`${name(x.user_id)} · ${x.plan} · ${x.status} · ${x.current_period_end ? new Date(x.current_period_end).toLocaleDateString(wcLocale()) : '—'}`));
     if (!subscriptions.length) view.append(element('p',tr('Aucun abonnement.')));
   } catch (e) { if (current()) view.textContent = tr('Administration indisponible.'); throw e; }
@@ -1291,7 +1294,7 @@ async function notifications() {
   const r = await db.rpc('get_my_notifications');
   if (!current()) return;
   if (r.error) { view.textContent = tr('Notifications indisponibles.'); check(r.error); }
-  view.replaceChildren(element('h2',tr('🔔 Mes notifications')),actionButton('Actualiser',notifications),actionButton(tr('Tout marquer comme lu'),async()=>{
+  view.replaceChildren(element('h2',tr('🔔 Mes notifications')),actionButton(tr('Actualiser'),notifications),actionButton(tr('Tout marquer comme lu'),async()=>{
     if (!current()) return;
     check((await db.rpc('mark_notifications_read',{p_id:null})).error);
     await refreshNotificationCount(); if(current()) await notifications();
@@ -1360,7 +1363,7 @@ db.auth.onAuthStateChange((event, session) => {
     if (previous !== user.id || event === 'INITIAL_SESSION') {
       setTimeout(() => act(async () => {
         const prefs=await db.from('profiles').select('preferred_language,distance_unit').eq('id',user.id).maybeSingle();
-        if(!prefs.error&&prefs.data){const changed=wcLang!==prefs.data.preferred_language;wcSetPreferences(prefs.data.preferred_language,prefs.data.distance_unit);if(changed){location.reload();return;}}
+        if(!prefs.error&&prefs.data){const changed=wcLang!==prefs.data.preferred_language;wcSetPreferences(prefs.data.preferred_language,prefs.data.distance_unit);if(changed){try{if(localStorage.getItem('wc-language')===wcLang){location.reload();return;}}catch{}}}
         const payment = new URLSearchParams(
           window.location.search
         ).get('payment');
@@ -1498,7 +1501,7 @@ async function detailedProfile(target,name,back){
   if(!current())return;
   view.replaceChildren(actionButton(tr('← Retour'),back));
   if(p.error||!p.data){view.append(element('p',tr('Profil détaillé indisponible selon les autorisations.')));return;}
-  const x=p.data,card=element('article');card.className='wc-detail';card.append(element('h2',`${x.pseudo||name} — ${x.age} ans`),element('p',[x.city,x.department].filter(Boolean).join(' · ')),element('p',x.bio||tr('Aucune présentation.')));
+  const x=p.data,card=element('article');card.className='wc-detail';card.append(element('h2',`${x.pseudo||name} — ${x.age} ${wcLang==='en'?'years old':'ans'}`),element('p',[x.city,x.department].filter(Boolean).join(' · ')),element('p',x.bio||tr('Aucune présentation.')));
   for(const [label,value] of [[tr('Passions'),x.interests],['Style Western',x.western_style],[tr('Relation recherchée'),x.relationship_goal]])card.append(element('p',label+' : '+(value||tr('Non renseigné'))));
   const complete=v=>v&&['interests','western_style','relationship_goal'].every(k=>String(v[k]??'').trim());
   if(!me.error&&complete(me.data)&&complete(x)&&!c.error&&c.data!==null){card.append(element('h3',c.data+tr(' % de compatibilité')),element('small',tr('Score indicatif fondé sur les préférences déclarées.')));const bar=element('progress');bar.max=100;bar.value=c.data;card.append(bar);}else card.append(element('p',tr('Compatibilité non calculée : préférences incomplètes ou score indisponible.')));
