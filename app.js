@@ -1205,8 +1205,8 @@ async function syncAdmin() {
   const uid = user?.id, token = ++adminCheck;
   adminButton.hidden = true;
   if (!uid) return;
-  const r = await db.rpc('is_admin');
-  if (token === adminCheck && user?.id === uid && !r.error && r.data === true) adminButton.hidden = false;
+  const r = await db.rpc('admin_mfa_status');
+  if (token === adminCheck && user?.id === uid && !r.error && r.data?.administrator === true) adminButton.hidden = false;
 }
 async function requireAdmin(uid) {
   if (!uid || user?.id !== uid) throw Error(tr('Session expirée.'));
@@ -1241,6 +1241,9 @@ async function administration() {
   const current = () => user?.id === uid && rev === revision;
   view.textContent = tr('Vérification des droits administrateur…');
   try {
+    const mfa=await db.rpc('admin_mfa_status');check(mfa.error);if(!current())return;
+    if(mfa.data?.administrator!==true)throw Error(tr('Accès administrateur refusé.'));
+    if((mfa.data.required||mfa.data.verified_factors>0)&&!mfa.data.aal2){await adminSecurity();return;}
     await requireAdmin(uid);
     const [members, reports, suspensions, subscriptions] = await Promise.all([
       adminRows('profiles','id,pseudo,age,city,discoverable'),
@@ -1257,7 +1260,7 @@ async function administration() {
     view.replaceChildren(element('h2',tr('🛡️ Administration Western Crush')), actionButton(tr('Actualiser'), administration));
     const stats = element('article');
     stats.append(element('p', `Profils enregistrés : ${members.length}`), element('p', `Membres Premium actifs : ${active.size}`), element('p', `Signalements à traiter : ${reports.filter(x => !x.reviewed).length}`), element('p', `Comptes suspendus : ${suspensions.length}`));
-    view.append(stats,actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests), element('h2',tr('Gestion des membres')));
+    view.append(stats,actionButton(wcLang==='en'?'Security / 2FA':'Sécurité / 2FA',adminSecurity),actionButton(wcLang==='en'?'Privacy requests':'Demandes RGPD',adminPrivacyRequests), element('h2',tr('Gestion des membres')));
     for (const m of members) {
       const card = element('article');
       card.append(element('h3', name(m.id)), element('p', `${m.age ?? '—'} ans · ${m.city || tr('Ville non renseignée')}`), element('p', m.id === uid ? tr('Votre compte administrateur') : suspended.has(m.id) ? 'Suspendu : '+suspended.get(m.id).reason : tr('Non suspendu')));
@@ -1678,4 +1681,76 @@ async function adminPrivacyRequests(){
  view.append(element('h2',t('Preuves de traitement','Completion receipts')));
  if(!receipts.data?.length)view.append(element('p',t('Aucune preuve enregistrée.','No receipts recorded.')));
  for(const receipt of receipts.data||[]){const c=element('article');c.append(element('p',t('Effacement base active — compte de test','Active database erasure — test account')),element('p',t('Demande : ','Request: ')+receipt.request_id),element('p',new Date(receipt.completed_at).toLocaleString(wcLocale())));view.append(c);}
+}
+
+async function adminSecurity(){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev;
+ const t=(fr,en)=>wcLang==='en'?en:fr;
+ const state=await db.rpc('admin_mfa_status');check(state.error);if(!current())return;
+ if(state.data?.administrator!==true)throw Error(t('Accès administrateur refusé.','Administrator access denied.'));
+ const factors=await db.auth.mfa.listFactors();check(factors.error);if(!current())return;
+ view.replaceChildren(element('h2',t('Sécurité administrateur — 2FA','Administrator security — 2FA')));
+ const panel=element('article');view.append(panel);
+ panel.append(element('p',state.data.required?t('Double authentification obligatoire côté serveur.','Server-enforced MFA.'):t('Phase de test : le second facteur n’est pas encore obligatoire côté serveur.','Test phase: MFA is not yet mandatory on the server.')));
+ panel.append(element('p',state.data.aal2?t('Session vérifiée avec deux facteurs.','Session verified with two factors.'):t('Session non vérifiée par le second facteur.','Second factor not verified for this session.')));
+ const verified=(factors.data.totp||[]).filter(x=>x.status==='verified');
+ if(verified.length){
+ panel.append(element('p',t('Application d’authentification configurée.','Authenticator app configured.')));
+ if(state.data.aal2){panel.append(actionButton(t('Retour administration','Back to administration'),administration));return;}
+ const choice=element('select');
+ for(const factor of verified){const o=element('option',factor.friendly_name||t('Application d’authentification','Authenticator'));o.value=factor.id;choice.append(o);}
+ panel.append(choice);
+ addCode(panel,()=>choice.value,async()=>{await adminSecurity();});
+ return;
+ }
+ if(state.data.required){panel.append(element('p',t('Aucun facteur utilisable : récupération par le propriétaire du projet nécessaire.','No usable factor: project owner recovery required.')));return;}
+ panel.append(element('p',t('Installe une application d’authentification sur ton téléphone. Ne partage jamais le QR code, la clé secrète ou les codes à six chiffres.','Install an authenticator on your phone. Never share the QR code, secret or six-digit codes.')));
+ const pending=(factors.data.all||[]).filter(x=>x.factor_type==='totp'&&x.status==='unverified');
+ if(pending.length){
+ panel.append(element('p',t('Une configuration inachevée a été détectée. Annule-la avant de recommencer.','An unfinished setup was detected. Cancel it before starting again.')));
+ panel.append(actionButton(t('Annuler la configuration inachevée','Cancel unfinished setup'),async()=>{
+ if(!current()||!confirm(t('Annuler uniquement les facteurs non vérifiés ?','Remove only unverified factors?')))return;
+ const latest=await db.auth.mfa.listFactors();check(latest.error);
+ if(!current())return;
+ for(const factor of (latest.data.all||[]).filter(x=>x.factor_type==='totp'&&x.status==='unverified')){if(!current())return;check((await db.auth.mfa.unenroll({factorId:factor.id})).error);}
+ if(current())await adminSecurity();
+ }));
+ }else{
+ panel.append(actionButton(t('Configurer la double authentification','Set up two-factor authentication'),async()=>{
+ if(!current())return;
+ const fresh=await db.rpc('admin_mfa_status');check(fresh.error);if(!current()||fresh.data?.administrator!==true||fresh.data?.required||fresh.data?.verified_factors>0)return;
+ const enrollment=await db.auth.mfa.enroll({factorType:'totp',issuer:'Western Crush',friendlyName:'Western Crush '+Date.now()});check(enrollment.error);if(!current())return;
+ const data=enrollment.data;
+ panel.replaceChildren(element('h3',t('Scanne ce QR code avec ton téléphone','Scan this QR code with your phone')),element('p',t('Ne fais pas de capture d’écran de ce QR code.','Do not take a screenshot of this QR code.')));
+ const img=element('img');img.alt=t('QR code privé de configuration','Private setup QR code');img.style.cssText='display:block;width:200px;max-width:100%;background:white;padding:8px;margin:12px auto;';
+ const qr=data.totp.qr_code;
+ if(typeof qr==='string'&&qr.startsWith('data:image/svg+xml'))img.src=qr;
+ else if(typeof qr==='string'&&qr.trim().startsWith('<svg'))img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(qr);
+ else throw Error(t('QR code indisponible. Annule la configuration et recommence.','QR unavailable. Cancel setup and retry.'));
+ panel.append(img);
+ const details=element('details');details.append(element('summary',t('Saisie manuelle (clé privée)','Manual entry (private secret)')),element('code',data.totp.secret));panel.append(details);
+ addCode(panel,()=>data.id,async()=>{await adminSecurity();});
+ panel.append(actionButton(t('Annuler cette configuration','Cancel this setup'),async()=>{
+ if(!current())return;
+ const latest=await db.auth.mfa.listFactors();check(latest.error);if(!current())return;
+ if((latest.data.all||[]).some(x=>x.id===data.id&&x.status==='unverified'))check((await db.auth.mfa.unenroll({factorId:data.id})).error);
+ if(current())await adminSecurity();
+ }));
+ }));
+ }
+ panel.append(actionButton(t('Retour administration','Back to administration'),administration));
+ function addCode(parent,getFactor,success){
+ const label=element('label',t('Code à six chiffres','Six-digit code'));const input=element('input');input.type='text';input.inputMode='numeric';input.autocomplete='one-time-code';input.maxLength=6;input.placeholder='000000';label.append(input);
+ const out=element('p');out.setAttribute('role','status');
+ parent.append(label,actionButton(t('Vérifier le code','Verify code'),async()=>{
+ if(!current())return;const code=input.value.trim();input.value='';
+ if(!/^\d{6}$/.test(code)){out.textContent=t('Saisis six chiffres.','Enter six digits.');return;}
+ try{const factorId=getFactor();const ch=await db.auth.mfa.challenge({factorId});check(ch.error);if(!current())return;
+ const v=await db.auth.mfa.verify({factorId,challengeId:ch.data.id,code});check(v.error);if(!current())return;
+ const after=await db.rpc('admin_mfa_status');check(after.error);if(!current())return;
+ if(after.data?.aal2!==true)throw Error('AAL2 not confirmed');
+ await success();
+ }catch{if(current())out.textContent=t('Code refusé ou session non confirmée. Essaie un nouveau code.','Code rejected or session not confirmed. Try a new code.');}
+ }),out);
+ }
 }
