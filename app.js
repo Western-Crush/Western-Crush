@@ -228,7 +228,7 @@ async function profile() {
     for(const [value,name] of options) f.append(new Option(name,value));
     f.value=(key==='preferred_language'?wcLang:key==='distance_unit'?wcUnit:data?.[key]) || fallback;if(key==='country_code')f.id='wc-profile-country'; fields[key]=f; l.append(f); form.append(l);
   }
-  form.append(element('small',wcLang==='en'?'US city lookup is available for 12 pilot locations below.':'La recherche américaine est disponible pour 12 villes pilotes ci-dessous.'));
+  form.append(element('small',wcLang==='en'?'US city lookup is available for 42 pilot locations below.':'La recherche américaine est disponible pour 42 villes pilotes ci-dessous.'));
   for (const [key, label, max] of [
     ['pseudo', tr('Pseudo'), 60],
     ['age', tr('Âge (18 ans minimum)'), 3],
@@ -810,7 +810,7 @@ let searchFilters = defaultFilters();
 let nearbyMode = false, nearbyRadius = 50;
 function locationForm(uid, rev) {
   const form=element('form'), en=wcLang==='en';
-  form.append(element('h2',en?'📍 My city':'📍 Ma ville'),element('p',en?'Choose a city or ZIP/postal code. US coverage is currently a 12-city pilot. No GPS.':'Choisissez une ville ou un code postal / ZIP. Couverture américaine pilote de 12 villes. Sans GPS.'));
+  form.append(element('h2',en?'📍 My city':'📍 Ma ville'),element('p',en?'Choose a city or ZIP/postal code. US coverage is currently a 42-city pilot. No GPS.':'Choisissez une ville ou un code postal / ZIP. Couverture américaine pilote de 42 villes. Sans GPS.'));
   const country=element('select');country.append(new Option('France','FR'),new Option('United States','US'));
   const profileCountry=document.querySelector('#wc-profile-country');country.value=profileCountry?.value==='US'?'US':'FR';
   const input=element('input');input.placeholder=en?'City or ZIP / postal code':'Ville ou code postal / ZIP';input.required=true;input.minLength=2;input.maxLength=100;
