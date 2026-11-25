@@ -1614,6 +1614,19 @@ async function adminPrivacyRequests(){
  inventoryOutput.append(element('p',t('Inventaire uniquement : aucune suppression ni révocation effectuée.','Inventory only: no deletion or session revocation performed.')));
  }catch(e){if(current())inventoryOutput.textContent=t('Inventaire indisponible. Reconnectez-vous si nécessaire.','Inventory unavailable. Sign in again if needed.');throw e;}
  }),inventoryOutput);
+ let cleaning=false;
+ card.append(actionButton(t('Révoquer les sessions et nettoyer les photos TEST','Revoke sessions and clean TEST photos'),async()=>{
+ if(!current()||cleaning)return;
+ if(!await adminConfirmation(t('Compte de test uniquement : bloquer les connexions et supprimer définitivement ses fichiers photo ?','Test account only: block sign-ins and permanently delete its photo files?')))return;
+ if(prompt(t('Pour confirmer, saisissez NETTOYER TEST','To confirm, type NETTOYER TEST'))!=='NETTOYER TEST')return;
+ await requireAdmin(uid);if(!current()||cleaning)return;cleaning=true;
+ inventoryOutput.textContent=t('Nettoyage en cours…','Cleaning…');
+ try{
+ const res=await db.functions.invoke('erasure-cleanup-test',{body:{request_id:r.id,confirmation:'NETTOYER TEST'}});check(res.error);if(!current())return;
+ const d=res.data;if(d?.account_frozen!==true||d?.billing_check!=='test_only'||d?.deletion_allowed!==false)throw Error('Invalid cleanup result');
+ inventoryOutput.replaceChildren(element('p',t('Compte verrouillé : oui','Account frozen: yes')),element('p',t('Sessions révoquées : ','Revoked sessions: ')+d.revoked_sessions),element('p',t('Photos principales supprimées : ','Main photos removed: ')+d.removed_files['profile-photos']),element('p',t('Photos galerie supprimées : ','Gallery photos removed: ')+d.removed_files['profile-gallery']),element('p',t('Sessions restantes : ','Remaining sessions: ')+d.remaining_sessions),element('p',t('Fichiers photo restants : ','Remaining photo files: ')+d.remaining_photos),element('p',t('Suppression définitive toujours verrouillée.','Permanent deletion remains locked.')));
+ }catch(e){if(current())inventoryOutput.textContent=t('Nettoyage non confirmé : compte potentiellement déjà verrouillé. Vérifier avant de réessayer.','Cleanup not confirmed: account may already be frozen. Check before retrying.');throw e;}finally{cleaning=false;}
+ }));
  let closing=false;
  card.append(actionButton(t('Résilier les abonnements TEST','Cancel TEST subscriptions'),async()=>{
  if(!current()||closing)return;
