@@ -2195,7 +2195,7 @@ async function adminSheriffAssistant(){
  result.append(element('p',t('Analyse des compteurs en cours…','Analyzing counters…')));
  view.replaceChildren(element('h2',t('🤠 Shérif — Assistant IA','🤠 Sheriff — AI assistant')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser le diagnostic','Refresh diagnosis'),adminSheriffAssistant),
  element('p',t('Assistant privé en lecture seule. Diagnostic par règles, résumé IA local facultatif. Aucune sanction, suppression, modification ou activation des paiements automatique.','Private read-only assistant. Rule-based diagnosis, optional local AI summary. No automatic sanctions, deletions, changes or payment activation.')),result,recommendations,ai);
- const [security,retention]=await Promise.allSettled([db.rpc('admin_security_overview'),db.rpc('wc_admin_retention_review')]);
+ const [security,retention,support]=await Promise.allSettled([db.rpc('admin_security_overview'),db.rpc('wc_admin_retention_review'),db.rpc('wc_admin_support_overview')]);
  if(!current())return;await requireAdmin(uid);if(!current())return;
  const data=security.status==='fulfilled'&&!security.value.error?security.value.data:null;
  const rows=retention.status==='fulfilled'&&!retention.value.error&&Array.isArray(retention.value.data)?retention.value.data:null;
@@ -2222,13 +2222,33 @@ async function adminSheriffAssistant(){
    recommendations.append(element('p',t(fr,english)+' : '+value+'. '+t('À examiner manuellement.','Review manually.')),actionButton(t('Ouvrir le contrôle','Open review'),target));
   }
  }
+ const supportData=support.status==='fulfilled'&&!support.value.error?support.value.data:null;
+ const supportFields=[
+ ['open','Tickets à traiter','Open tickets','open',true],
+ ['waiting_member','En attente du membre','Waiting for member','waiting_member',false],
+ ['closed','Tickets clôturés','Closed tickets','closed',false],
+ ['safety_open','Tickets de sécurité à traiter','Open safety tickets','open',true],
+ ['open_24h','Tickets ouverts sans mise à jour depuis 24 h','Open tickets unchanged for 24h','open',true],
+ ['waiting_member_7d','Attente du membre depuis 7 jours ou plus','Waiting for member for at least 7 days','waiting_member',true]];
+ result.append(element('h3',t('Suivi de l’assistance','Support overview')));
+ for(const [key,fr,english,filter,review] of supportFields){
+  const value=number(supportData?.[key]);snapshot['support_'+key]=value;
+  result.append(element('p',t(fr,english)+' : '+(value===null?t('Indisponible','Unavailable'):value)));
+  if(value===null){unknown++;continue;}
+  if(review&&value>0){
+   flagged++;
+   const advice=key==='safety_open'?t('À examiner en priorité manuellement. La catégorie ne prouve pas une urgence.','Prioritize manual review. The category does not establish an emergency.'):key==='waiting_member_7d'?t('Vérifier si une relance est utile, sans envoi automatique.','Consider whether a follow-up is useful; no automatic message.'):t('À examiner manuellement.','Review manually.');
+   recommendations.append(element('p',t(fr,english)+' : '+value+'. '+advice),actionButton(t('Ouvrir la file correspondante','Open matching status queue'),()=>wcSupportList(true,0,filter)));
+  }
+ }
+ recommendations.append(actionButton(t('Tous les tickets d’assistance','All support tickets'),()=>wcSupportList(true)));
  const rights=number(rows?.find(x=>x.category==='rights_deadline')?.review_due);
  snapshot.privacy_review_due=rights;
  result.append(element('p',t('Demandes RGPD à réexaminer','Privacy requests due for review')+' : '+(rights===null?t('Indisponible','Unavailable'):rights)));
  if(rights===null)unknown++;else if(rights>0){flagged++;recommendations.append(element('p',t('Examiner les échéances RGPD : ','Review privacy deadlines: ')+rights),actionButton(t('Demandes RGPD','Privacy requests'),adminPrivacyRequests));}
  if(!flagged)recommendations.append(element('p',unknown?t('Diagnostic incomplet : aucune conclusion globale possible.','Incomplete diagnosis: no overall conclusion possible.'):t('Aucun signal parmi les compteurs examinés. Cela ne prouve pas l’absence de faille.','No flags in the reviewed counters. This does not prove the absence of vulnerabilities.')));
- recommendations.append(element('p',t('Les plafonds ne prouvent pas une fraude. Stripe, AgeVerif, déploiements et tests externes restent à vérifier séparément.','Limits do not prove fraud. Stripe, AgeVerif, deployments and external tests require separate checks.')),actionButton(t('Modération des photos','Photo moderation'),adminPhotoReview),actionButton(t('Conservation des données','Data retention'),adminRetentionReview),actionButton(t('Journal des incidents','Incident journal'),adminIncidentJournal));
- ai.append(element('h3',t('Synthèse IA sur cet appareil','AI summary on this device')),element('p',t('Si un modèle local compatible est déjà disponible, il peut résumer uniquement ces compteurs. Aucun téléchargement déclenché, aucune clé API, aucun message ni photo de membre transmis. La synthèse peut être inexacte.','If a compatible local model is already available, it can summarize only these counters. No download initiated, API key, member message or photo sent. The summary may be inaccurate.')));
+ recommendations.append(element('p',t('Les plafonds ne prouvent pas une fraude. Les compteurs de tickets peuvent se recouper ; les seuils 24 h et 7 jours sont des repères internes, pas des délais garantis. Stripe, AgeVerif, déploiements et tests externes restent à vérifier séparément.','Limits do not prove fraud. Ticket counts may overlap; 24h and 7 days are internal review thresholds, not promised deadlines. Stripe, AgeVerif, deployments and external tests require separate checks.')),actionButton(t('Modération des photos','Photo moderation'),adminPhotoReview),actionButton(t('Conservation des données','Data retention'),adminRetentionReview),actionButton(t('Journal des incidents','Incident journal'),adminIncidentJournal));
+ ai.append(element('h3',t('Synthèse IA sur cet appareil','AI summary on this device')),element('p',t('Si un modèle local compatible est déjà disponible, il peut résumer uniquement ces compteurs. Aucun téléchargement déclenché, aucune clé API, aucun message, objet de ticket ni photo de membre transmis. La synthèse peut être inexacte.','If a compatible local model is already available, it can summarize only these counters. No download initiated, API key, member message, ticket subject or photo sent. The summary may be inaccurate.')));
  const out=element('p');out.setAttribute('role','status');out.style.whiteSpace='pre-wrap';
  ai.append(actionButton(t('Générer une synthèse IA locale','Generate local AI summary'),async()=>{
   await requireAdmin(uid);if(!current())return;
