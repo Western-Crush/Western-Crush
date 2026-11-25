@@ -226,9 +226,9 @@ async function profile() {
   ]){
     const l=element('label',label), f=element('select');
     for(const [value,name] of options) f.append(new Option(name,value));
-    f.value=(key==='preferred_language'?wcLang:key==='distance_unit'?wcUnit:data?.[key]) || fallback; fields[key]=f; l.append(f); form.append(l);
+    f.value=(key==='preferred_language'?wcLang:key==='distance_unit'?wcUnit:data?.[key]) || fallback;if(key==='country_code')f.id='wc-profile-country'; fields[key]=f; l.append(f); form.append(l);
   }
-  form.append(element('small',tr('États-Unis : saisissez votre ville et votre État dans les champs suivants. La localisation automatique est actuellement réservée à la France.')));
+  form.append(element('small',wcLang==='en'?'US city lookup is available for 12 pilot locations below.':'La recherche américaine est disponible pour 12 villes pilotes ci-dessous.'));
   for (const [key, label, max] of [
     ['pseudo', tr('Pseudo'), 60],
     ['age', tr('Âge (18 ans minimum)'), 3],
@@ -809,26 +809,27 @@ const defaultFilters = () => ({wanted_country:'',min_age:18,max_age:90,wanted_ge
 let searchFilters = defaultFilters();
 let nearbyMode = false, nearbyRadius = 50;
 function locationForm(uid, rev) {
-  const form = element('form');
-  form.append(element('h2', tr('📍 Ma commune (France uniquement)')), element('p', tr('Choisissez votre commune pour activer la recherche à proximité. Seul le centre de la commune est enregistré, sans GPS.')));
-  const input = element('input'); input.placeholder = tr('Ville ou code postal'); input.required = true; input.minLength = 2; input.maxLength = 100;
-  const go = element('button', tr('Chercher une commune')); go.type = 'submit';
-  const results = element('div'); form.append(input, go, results);
-  let request = 0;
-  form.onsubmit = e => { e.preventDefault(); void act(async () => {
-    const n = ++request; results.textContent = tr('Recherche…');
-    const r = await db.rpc('search_communes', {search_text:input.value.trim()});
-    if (user?.id !== uid || revision !== rev || n !== request) return;
-    check(r.error); results.replaceChildren();
-    if (!r.data?.length) results.append(element('p',tr('Aucune commune trouvée.')));
-    for (const c of r.data || []) results.append(actionButton(c.nom + ' (' + c.code_postal + ')', async () => {
-      if (user?.id !== uid || revision !== rev || n !== request) return;
-      if (!confirm(tr('Enregistrer cette commune sur votre profil ?'))) return;
-      check((await db.rpc('set_member_location',{commune_code:c.code_insee})).error);
-      if (user?.id === uid && revision === rev) {status(tr('Commune enregistrée.')); await profile();}
+  const form=element('form'), en=wcLang==='en';
+  form.append(element('h2',en?'📍 My city':'📍 Ma ville'),element('p',en?'Choose a city or ZIP/postal code. US coverage is currently a 12-city pilot. No GPS.':'Choisissez une ville ou un code postal / ZIP. Couverture américaine pilote de 12 villes. Sans GPS.'));
+  const country=element('select');country.append(new Option('France','FR'),new Option('United States','US'));
+  const profileCountry=document.querySelector('#wc-profile-country');country.value=profileCountry?.value==='US'?'US':'FR';
+  const input=element('input');input.placeholder=en?'City or ZIP / postal code':'Ville ou code postal / ZIP';input.required=true;input.minLength=2;input.maxLength=100;
+  const go=element('button',tr('Rechercher'));go.type='submit';
+  const results=element('div');form.append(country,input,go,results);
+  let request=0;country.onchange=()=>{request++;results.replaceChildren();};
+  form.onsubmit=e=>{e.preventDefault();void act(async()=>{
+    const n=++request,us=country.value==='US';results.textContent=tr('Recherche…');
+    const r=await db.rpc(us?'search_us_locations':'search_communes',{search_text:input.value.trim()});
+    if(user?.id!==uid||revision!==rev||n!==request)return;
+    check(r.error);results.replaceChildren();
+    if(!r.data?.length)results.append(element('p',tr('Aucune commune trouvée.')));
+    for(const c of r.data||[])results.append(actionButton(us?c.city+' — '+c.state+' ('+c.zip+')':c.nom+' ('+c.code_postal+')',async()=>{
+      if(user?.id!==uid||revision!==rev||n!==request)return;
+      if(!confirm(tr('Enregistrer cette commune sur votre profil ?')))return;
+      check((await db.rpc(us?'set_us_location':'set_member_location',us?{zip_code:c.zip}:{commune_code:c.code_insee})).error);
+      if(user?.id===uid&&revision===rev){status(tr('Commune enregistrée.'));await profile();}
     }));
-  }); };
-  return form;
+  });};return form;
 }
 function searchForm(paid) {
   const form = element('form'); form.className = 'search-filters';
@@ -850,13 +851,13 @@ function searchForm(paid) {
   form.append(lookup,actionButton(tr('Trouver une commune'),async()=>{
     const q=lookup.value.trim(); const n=++request; if(q.length<2){choices.textContent=tr('Saisissez au moins deux caractères pour trouver une commune.'); return;}
     choices.textContent=tr('Recherche…');
-    const r=await db.rpc('search_communes',{search_text:q});
+    const us=fields.wanted_country.value==='US';const r=await db.rpc(us?'search_us_locations':'search_communes',{search_text:q});
     if(user?.id!==uid||revision!==rev||n!==request)return;
     if(r.error){choices.textContent=r.error.message || tr('Recherche de commune indisponible.');return;}choices.replaceChildren();
     if(!r.data?.length)choices.textContent=tr('Aucune commune trouvée.');
-    for(const c of r.data||[])choices.append(actionButton(c.nom+' ('+c.code_postal+')',async()=>{
+    for(const c of r.data||[])choices.append(actionButton(us?c.city+' — '+c.state+' ('+c.zip+')':c.nom+' ('+c.code_postal+')',async()=>{
       if(user?.id!==uid||revision!==rev||n!==request)return;
-      fields.wanted_country.value='FR';city.value=c.nom;const code=String(c.code_insee);fields.wanted_department.value=code.startsWith('97')||code.startsWith('98')?code.slice(0,3):code.slice(0,2);choices.replaceChildren();
+      if(us){fields.wanted_country.value='US';city.value=c.city;fields.wanted_department.value=c.state;choices.replaceChildren();return;}fields.wanted_country.value='FR';city.value=c.nom;const code=String(c.code_insee);fields.wanted_department.value=code.startsWith('97')||code.startsWith('98')?code.slice(0,3):code.slice(0,2);choices.replaceChildren();
     }));
   }),choices);
   const dep=field('wanted_department',tr('Département / État (State)'));dep.maxLength=100;
