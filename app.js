@@ -1703,7 +1703,7 @@ async function administration() {
     }
     view.append(element('h2',tr('Signalements')));
     if (!reports.length) view.append(element('p',tr('Aucun signalement.')));
-    const priorityReport = x => /^(Suspicion de compte mineur|Suspicion d’exploitation sexuelle de mineur|Image intime non consentie|Contenu sexuel explicite|Contenu violent ou menaçant|Harcèlement ou insultes|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
+    const priorityReport = x => /^(Suspicion de compte mineur|Suspicion d’exploitation sexuelle de mineur|Image intime non consentie|Contenu sexuel explicite|Contenu violent ou menaçant|Harcèlement ou insultes|Arnaque ou escroquerie|Usurpation d’identité|Photo utilisée sans consentement|Faux profil)(?: — |$)/u.test(x.reason || '');
     const orderedReports = [...reports].sort((a,b) => Number(Boolean(a.reviewed))-Number(Boolean(b.reviewed)) || Number(priorityReport(b))-Number(priorityReport(a)));
     for (const x of orderedReports) {
       const card = element('article');
@@ -2244,7 +2244,7 @@ async function adminSheriffAssistant(){
  result.append(element('p',t('Analyse des compteurs en cours…','Analyzing counters…')));
  view.replaceChildren(element('h2',t('🤠 Shérif','🤠 Sheriff')),actionButton(t('Retour administration','Back to administration'),administration),actionButton(t('Actualiser le diagnostic','Refresh diagnosis'),adminSheriffAssistant),
  element('p',t('Assistant privé en lecture seule. Diagnostic par règles, résumé IA local facultatif. Aucune sanction, suppression, modification ou activation des paiements automatique.','Private read-only assistant. Rule-based diagnosis, optional local AI summary. No automatic sanctions, deletions, changes or payment activation.')),result,recommendations,ai);
- const [security,retention,support]=await Promise.allSettled([db.rpc('admin_security_overview'),db.rpc('wc_admin_retention_review'),db.rpc('wc_admin_support_overview')]);
+ const [security,retention,support,reports]=await Promise.allSettled([db.rpc('admin_security_overview'),db.rpc('wc_admin_retention_review'),db.rpc('wc_admin_support_overview'),db.rpc('wc_admin_report_overview')]);
  if(!current())return;await requireAdmin(uid);if(!current())return;
  const data=security.status==='fulfilled'&&!security.value.error?security.value.data:null;
  const rows=retention.status==='fulfilled'&&!retention.value.error&&Array.isArray(retention.value.data)?retention.value.data:null;
@@ -2271,6 +2271,21 @@ async function adminSheriffAssistant(){
    recommendations.append(element('p',t(fr,english)+' : '+value+'. '+t('À examiner manuellement.','Review manually.')),actionButton(t('Ouvrir le contrôle','Open review'),target));
   }
  }
+ const reportData=reports.status==='fulfilled'&&!reports.value.error?reports.value.data:null;
+ const reportFields=[
+ ['threats','Menaces et contenus violents','Threats and violent content'],
+ ['harassment','Harcèlement et insultes','Harassment and insults'],
+ ['fraud','Arnaques et escroqueries','Scams and fraud'],
+ ['older_24h','Signalements ciblés en attente depuis au moins 24 h','Targeted reports pending for at least 24h'],
+ ['unknown_date','Signalements ciblés sans date','Targeted reports without a date']];
+ result.append(element('h3',t('Surveillance des signalements','Report monitoring')));
+ for(const [key,fr,english] of reportFields){
+  const value=number(reportData?.[key]);snapshot['report_'+key]=value;
+  result.append(element('p',t(fr,english)+' : '+(value===null?t('Indisponible','Unavailable'):value)));
+  if(value===null){unknown++;continue;}
+  if(value>0){flagged++;recommendations.append(element('p',t(fr,english)+' : '+value+'. '+(key==='threats'?t('Examen humain prioritaire.','Prioritize human review.'):t('Vérifier manuellement.','Review manually.'))),actionButton(t('Examiner les signalements','Review reports'),()=>wcAdminReportQueue(key)));}
+ }
+ recommendations.append(element('p',t('Les signalements sont des allégations, pas des preuves. Le repère de 24 h est interne, non garanti. Les compteurs de retard peuvent recouper les catégories.','Reports are allegations, not proof. The 24h threshold is internal, not guaranteed. Age counters may overlap categories.')),actionButton(t('Tous les signalements ciblés','All targeted reports'),()=>wcAdminReportQueue('all')));
  const supportData=support.status==='fulfilled'&&!support.value.error?support.value.data:null;
  const supportFields=[
  ['open','Tickets à traiter','Open tickets','open',true],
@@ -2496,3 +2511,45 @@ db.auth.onAuthStateChange((event,session)=>{
   if(session&&event!=='PASSWORD_RECOVERY')setTimeout(()=>void wcSupportRefreshUnread(),1000);
  }
 });
+
+
+// V18.22 — human review queue, separate from the aggregate-only Sheriff snapshot.
+async function wcAdminReportQueue(filter='all'){
+ const uid=user?.id,rev=++revision,view=$('view'),current=()=>user?.id===uid&&revision===rev,t=(fr,en)=>wcLang==='en'?en:fr;
+ const categories={threats:'Contenu violent ou menaçant',harassment:'Harcèlement ou insultes',fraud:'Arnaque ou escroquerie'};
+ const labels={all:t('Tous les signalements ciblés','All targeted reports'),threats:t('Menaces et violence','Threats and violence'),harassment:t('Harcèlement et insultes','Harassment and insults'),fraud:t('Arnaques','Scams'),older_24h:t('En attente depuis au moins 24 h','Pending at least 24h'),unknown_date:t('Date manquante','Missing date')};
+ if(!Object.hasOwn(labels,filter))return;
+ await requireAdmin(uid);if(!current())return;
+ view.replaceChildren(element('h2',labels[filter]),actionButton(t('Retour Shérif','Back to Sheriff'),adminSheriffAssistant),actionButton(t('Actualiser','Refresh'),()=>wcAdminReportQueue(filter)),element('p',t('Examen manuel. Les signalements ne prouvent pas les faits. En cas de danger immédiat, suivre la procédure de sécurité ; aucune transmission automatique aux autorités.','Manual review. Reports do not establish facts. In immediate danger, follow the safety procedure; no automatic referral to authorities.')));
+ const rows=await adminRows('reports','id,reporter_id,reported_id,reason,created_at,reviewed');
+ await requireAdmin(uid);if(!current())return;
+ const now=Date.now();
+ const selected=rows.filter(x=>{
+  if(x.reviewed)return false;
+  const cat=String(x.reason||'').split(' — ')[0];
+  if(!Object.values(categories).includes(cat))return false;
+  if(filter==='all')return true;
+  if(filter==='older_24h')return x.created_at!=null&&Date.parse(x.created_at)<=now-86400000;
+  if(filter==='unknown_date')return x.created_at==null;
+  return cat===categories[filter];
+ }).sort((a,b)=>Number(String(b.reason).split(' — ')[0]===categories.threats)-Number(String(a.reason).split(' — ')[0]===categories.threats)||(Date.parse(a.created_at)||0)-(Date.parse(b.created_at)||0));
+ if(!selected.length)view.append(element('p',t('Aucun signalement à traiter dans cette file.','No pending reports in this queue.')));
+ for(const x of selected){
+  const card=element('article');
+  card.append(element('strong',t('Signalement non confirmé','Unconfirmed report')),element('p',x.reason),element('small',t('Reçu : ','Received: ')+(x.created_at?new Date(x.created_at).toLocaleString(wcLocale()):t('Date inconnue','Unknown date'))),element('p',t('Membre signalé : ','Reported member: ')+x.reported_id),element('p',t('Auteur : ','Reporter: ')+x.reporter_id),element('small',t('Référence : ','Reference: ')+x.id));
+  for(const [decision,label] of [['unfounded',t('Non fondé','Unsubstantiated')],['action_taken',t('Mesure effectuée','Action completed')],['referred',t('Transmis au service compétent','Referred to competent service')]]){
+   card.append(actionButton(label,async()=>{
+    if(!current())return;
+    const reason=await adminConfirmation(label+' — '+t('Confirmer et préciser le motif','Confirm and explain the reason'),true);
+    if(!reason)return;
+    if(reason.trim().length<3)throw Error(t('Motif : 3 caractères minimum.','Reason: at least 3 characters.'));
+    await requireAdmin(uid);if(!current())return;
+    const r=await db.rpc('wc_admin_close_report',{p_report:x.id,p_decision:decision,p_reason:reason});check(r.error);
+    if(r.data!==true)throw Error(t('Signalement non modifié.','Report not updated.'));
+    if(current())await wcAdminReportQueue(filter);
+   }));
+  }
+  view.append(card);
+ }
+ view.append(actionButton(t('Administration complète','Full administration'),administration));
+}
