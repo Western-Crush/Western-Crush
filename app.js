@@ -129,24 +129,26 @@ async function recordLegalEvent(eventType){
   check(result.error);
 }
 async function legalSettings(){
-  const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
-  const en=wcLang==='en', t=(fr,english)=>en?english:fr;
-  view.replaceChildren(element('h2',t('Confidentialité et droits','Privacy and rights')));
-  const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal.html';link.target='_blank';link.rel='noopener';view.append(link);
-  const result=await db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).order('recorded_at',{ascending:false}).limit(100);
-  if(user?.id!==uid||rev!==revision)return;check(result.error);
-  const events=result.data||[], acknowledged=events.some(x=>x.event_type==='beta_terms_acknowledged');
-  const consent=events.find(x=>['sensitive_opt_in','sensitive_withdrawn'].includes(x.event_type));
-  const panel=element('article');panel.append(element('p',t('Documents provisoires : aucune acceptation de conditions définitives.','Draft documents: no acceptance of final legal terms.')));
-  const add=(label,type,question)=>actionButton(label,async()=>{if(user?.id!==uid||rev!==revision)return;if(question&&!confirm(question))return;await recordLegalEvent(type);if(user?.id===uid&&rev===revision){status(t('Demande ou choix enregistré.','Request or choice recorded.'));await legalSettings();}});
-  if(!acknowledged)panel.append(add(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),'beta_terms_acknowledged',t('Confirmez-vous avoir lu les règles provisoires ?','Confirm that you have read the draft beta rules?')));
-  else panel.append(element('p',t('Lecture des règles bêta enregistrée.','Beta rules acknowledgement recorded.')));
-  panel.append(element('h3',t('Préférences sensibles — facultatif','Sensitive preferences — optional')),element('p',t('Le consentement peut être retiré. Cette interface pilote enregistre votre choix ; elle ne garantit pas encore l’arrêt de tous les traitements. Ne fournissez pas de données sensibles pendant cette phase.','You may withdraw consent. This pilot records your choice; full processing restrictions are not yet implemented. Do not provide sensitive data during this phase.')));
-  panel.append(element('p',consent?.event_type==='sensitive_opt_in'?t('Choix pilote : accord','Pilot choice: opt in'):t('Choix pilote : aucun accord actif','Pilot choice: no active consent')));
-  panel.append(add(t('Retirer mon accord','Withdraw my consent'),'sensitive_withdrawn',t('Enregistrer le retrait ?','Record withdrawal?')));
-  panel.append(element('h3',t('Mes droits','My rights')),element('p',t('Ces boutons enregistrent une demande. Ils ne déclenchent pas encore un export ou une suppression automatique.','These buttons record a request. They do not yet trigger an automatic export or deletion.')));
-  panel.append(add(t('Demander mes données','Request my data'),'access_requested',t('Envoyer la demande d’accès ?','Submit access request?')),add(t('Demander la suppression de mon compte','Request account deletion'),'erasure_requested',t('Enregistrer une demande de suppression ? Le compte ne sera pas supprimé automatiquement.','Record a deletion request? Your account will not be automatically deleted.')));
-  view.append(panel);
+ const uid=user?.id,rev=++revision,view=$('view');if(!uid)return;
+ const t=(fr,en)=>wcLang==='en'?en:fr;
+ view.replaceChildren(element('h2',t('Confidentialité et droits','Privacy and rights')));
+ const link=element('a',t('Documents juridiques provisoires','Draft legal documents'));link.href='legal.html';link.target='_blank';link.rel='noopener';view.append(link);
+ const [events,requests]=await Promise.all([db.from('beta_legal_events').select('event_type,recorded_at').eq('user_id',uid).eq('event_type','beta_terms_acknowledged').limit(1),db.from('privacy_requests').select('id,kind,status,created_at').eq('user_id',uid).order('created_at',{ascending:false}).limit(50)]);
+ if(user?.id!==uid||rev!==revision)return;check(events.error);check(requests.error);
+ const panel=element('article');
+ panel.append(element('p',t('Documents provisoires.','Draft documents.')));
+ if(!events.data?.length)panel.append(actionButton(t('Confirmer la lecture des règles bêta','Acknowledge beta rules'),async()=>{await recordLegalEvent('beta_terms_acknowledged');if(user?.id===uid&&rev===revision)await legalSettings();}));
+ else panel.append(element('p',t('Lecture enregistrée.','Acknowledgement recorded.')));
+ async function request(kind){const r=await db.from('privacy_requests').insert({user_id:uid,kind,language:wcLang});if(r.error?.code!=='23505')check(r.error);}
+ panel.append(element('h3',t('Préférences sensibles','Sensitive preferences')),element('p',t('Les nouvelles préférences sensibles sont désactivées pendant la bêta. Vous pouvez effacer votre champ de préférence et demander un examen des autres données.','New sensitive preferences are disabled during beta. You can clear your preference field and request review of other data.')));
+ panel.append(actionButton(t('Effacer ma préférence et retirer mon accord','Clear my preference and withdraw consent'),async()=>{if(!confirm(t('Effacer le champ de préférence enregistré ?','Clear the saved preference field?')))return;check((await db.rpc('withdraw_beta_sensitive_preferences')).error);await recordLegalEvent('sensitive_withdrawn');await request('withdrawal');if(user?.id===uid&&rev===revision)await legalSettings();}));
+ panel.append(element('h3',t('Mes données','My data')),element('p',t('Export JSON partiel : les fichiers photo et certaines données de tiers nécessitent une demande complémentaire.','Partial JSON export: photo files and some third-party data require a separate request.')));
+ panel.append(actionButton(t('Télécharger mes données (JSON)','Download my data (JSON)'),async()=>{const r=await db.functions.invoke('export-my-data',{body:{}});check(r.error);if(user?.id!==uid||rev!==revision)return;const url=URL.createObjectURL(new Blob([JSON.stringify(r.data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='western-crush-my-data.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}));
+ for(const [kind,fr,en] of [['access','Demander un export complet','Request full data export'],['erasure','Demander la suppression de mon compte','Request account deletion']])panel.append(actionButton(t(fr,en),async()=>{if(!confirm(t('Enregistrer cette demande pour examen ? Aucun compte ne sera automatiquement supprimé.','Submit for review? No account will be automatically deleted.')))return;await request(kind);if(user?.id===uid&&rev===revision)await legalSettings();}));
+ panel.append(element('h3',t('Suivi des demandes','Request history')));
+ const kinds={access:t('Accès','Access'),erasure:t('Suppression','Erasure'),withdrawal:t('Retrait','Withdrawal')},states={pending:t('En attente','Pending'),reviewing:t('En cours','Reviewing'),completed:t('Traitée','Completed'),rejected:t('Refusée','Rejected')};
+ for(const r of requests.data||[])panel.append(element('p',kinds[r.kind]+' — '+states[r.status]+' — '+new Date(r.created_at).toLocaleString(wcLocale())));
+ view.append(panel);
 }
 const legalButton=$('wc-privacy');if(legalButton)legalButton.onclick=()=>act(legalSettings);
 
@@ -295,6 +297,7 @@ async function profile() {
 
     if (key === 'pseudo') f.required = true;
 
+    if(key==='looking_for'){f.readOnly=true;f.placeholder=wcLang==='en'?'Unavailable during beta':'Indisponible pendant la bêta';}
     fields[key] = f;
     l.append(f);
     form.append(l);
