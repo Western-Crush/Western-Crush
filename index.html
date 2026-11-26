@@ -258,23 +258,41 @@ Je certifie avoir 18 ans ou plus.
 
  let deferred=null;
  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
- const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
- const android=/Android/i.test(navigator.userAgent);
- panel.setAttribute('aria-label',t('Installation mobile','Mobile installation'));
+ const ua=navigator.userAgent;
+ const ios=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ const android=/Android/i.test(ua);
+ const firefox=/Firefox\//i.test(ua);
+ const windows=/Windows/i.test(ua);
+ const edge=/Edg\//i.test(ua);
+ const chrome=/Chrome\//i.test(ua)&&!edge;
+ panel.setAttribute('aria-label',t('Installation de Western Crush','Western Crush installation'));
  button.textContent=t('Installer Western Crush','Install Western Crush');
  button.setAttribute('aria-controls','wc-install-help');
  button.setAttribute('aria-expanded','false');
+ help.setAttribute('role','status');
+ help.setAttribute('aria-live','polite');
  function sync(){panel.hidden=standalone();}
+ function instructions(){
+  if(ios)return t('Sur iPhone ou iPad : ouvrez cette page dans Safari, touchez Partager, puis « Sur l’écran d’accueil » et Ajouter. Activez « Ouvrir comme app web » si proposé.','On iPhone or iPad: open this page in Safari, tap Share, then Add to Home Screen and Add. Enable Open as Web App if offered.');
+  if(android)return t('Sur Android : ouvrez cette page dans Chrome, menu ⋮, puis « Installer l’application » ou « Ajouter à l’écran d’accueil ».','On Android: open this page in Chrome, tap ⋮, then Install app or Add to Home screen.');
+  if(firefox&&windows)return t('Dans Firefox sous Windows : cliquez sur l’icône d’application web dans la barre d’adresse si elle est disponible. Sinon, ouvrez cette page dans Edge ou Chrome pour l’installer.','In Firefox on Windows: click the web app icon in the address bar if available. Otherwise open this page in Edge or Chrome to install it.');
+  if(edge)return t('Dans Edge : menu ⋯ → Applications (ou Plus d’outils → Applications) → Installer ce site en tant qu’application.','In Edge: menu ⋯ → Apps (or More tools → Apps) → Install this site as an app.');
+  if(chrome)return t('Dans Chrome : cliquez sur l’icône d’installation dans la barre d’adresse ou ouvrez ⋮ → Caster, enregistrer et partager → Installer la page en tant qu’application, si disponible.','In Chrome: click the install icon in the address bar or open ⋮ → Cast, save and share → Install page as app, if available.');
+  return t('Ce navigateur ne propose pas de fenêtre d’installation automatique. Essayez Chrome ou Edge sur ordinateur, Chrome sur Android ou Safari sur iPhone.','This browser does not offer an automatic install prompt. Try Chrome or Edge on desktop, Chrome on Android or Safari on iPhone.');
+ }
  function showHelp(){
   help.hidden=false;button.setAttribute('aria-expanded','true');
-  help.textContent=ios?t('Dans Safari : ouvrez Partager, choisissez « Sur l’écran d’accueil » puis Ajouter. Si proposé, activez « Ouvrir comme app web ».','In Safari: open Share, choose Add to Home Screen, then Add. If offered, enable Open as Web App.'):android?t('Dans Chrome : ouvrez le menu ⋮, puis « Installer l’application » ou « Ajouter à l’écran d’accueil », si disponible.','In Chrome: open the ⋮ menu, then Install app or Add to Home screen if available.'):t('Si votre navigateur propose l’installation d’une application web ou l’ajout à l’écran d’accueil, utilisez son menu.','Use your browser menu if it offers web app installation or adding to the home screen.');
+  help.textContent=instructions();
  }
  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferred=event;sync();});
  window.addEventListener('appinstalled',()=>{deferred=null;panel.hidden=true;});
  button.addEventListener('click',async()=>{
+  if(standalone()){sync();return;}
   if(!deferred){showHelp();return;}
-  const prompt=deferred;deferred=null;
-  try{await prompt.prompt();const choice=await prompt.userChoice;if(choice?.outcome!=='accepted')showHelp();}catch{showHelp();}
+  const prompt=deferred;deferred=null;button.disabled=true;
+  try{await prompt.prompt();const choice=await prompt.userChoice;if(choice?.outcome!=='accepted')showHelp();else{help.hidden=false;button.setAttribute('aria-expanded','true');help.textContent=t('Installation acceptée. Vérifiez votre écran d’accueil ou le menu Démarrer.','Installation accepted. Check your home screen or Start menu.');}}
+  catch{showHelp();}
+  finally{button.disabled=false;sync();}
  });
  function connectivity(){
   network.hidden=navigator.onLine!==false;
